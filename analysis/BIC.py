@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from tabulate import tabulate
+import pandas as pd
 
 from astropy.table import Table
 from tqdm.notebook import tqdm
@@ -233,121 +234,116 @@ def run_XD_BIC(data, data_keys: List[str], data_err_keys: List[str], component_r
 
     return results, best_params
 
-# def BIC_analysis(saved_path):
-#     """
-#     Analyse the results of the XD and plot the BIC/AIC scores for each component count.
 
-#     Parameters:
-#         saved_path (str): Path to the pickle file containing BIC results.
-
-#     Returns:
-#         None
-#     """
-#     # Load the saved results from the XD Run
-#     with open(saved_path, "rb") as f:
-#         XD_results = pkl.load(f)
-
-#     # Extract unique Gaussian component counts
-#     component_range = XD_results_df["n_gauss"].dropna().unique()
-#     component_range.sort()
-
-#     # Determine number of initializations and repeats
-#     n_init = XD_results_df["init no"].max() + 1
-#     n_repeats = XD_results_df["repeat no."].max() + 1
-
-#     # Create table of no gassians vs number of failed XD Runs
-#     n_failed_XD = (
-#         XD_results_df.groupby(["n_gauss", "repeat no."])        # Group by Gaussian components and the repeats
-#         .agg(Total_Runs=("BIC", "count"),               # Count total runs (including successful and failed)
-#             Failed_XD_Runs=("BIC", lambda x: x.isna().sum()))  # Count failed runs (BIC is NaN)
-#         .reindex(component_range, fill_value=0)         # Ensure all Gaussian components are represented
-#         .reset_index()                                  # Reset index for a clean DataFrame
-#     )
-
-#     # print the results - this will also be returned by the function
-#     print("Table of Number of Gaussians vs Number of Failed XD Runs")
-#     print(tabulate(n_failed_XD, headers='keys', tablefmt='psql'))
-
-#     # Create a table of initialisation results across repeats
-#     spread_results = = (
-#         XD_results_df.groupby("n_gauss")
-#     )
-
-
-#     # Ensure consistentcy across repeats
-#     # For each component and repeat work out mean and std error for each component across initialisations:
+def BIC_analysis(saved_path):
+    """
+    Analyse the results of the Extreme Deconvolution (XD) 
     
+    Runs by computing and visualising the BIC/AIC scores for each Gaussian component count.
 
+    This function:
+    - Loads XD results from a pickle file.
+    - Calculates failed XD runs per Gaussian component.
+    - Computes mean and standard deviation of BIC and AIC scores.
+    - Displays formatted tables of results.
+    - Plots combined BIC and AIC curves with lowest, highest, and median scores.
 
+    Parameters:
+    ------------
+    saved_path : str
+        The file path to the pickle file containing XD results, including BIC and AIC scores.
 
-#     # Prepare data for plotting
-#     BIC_means, BIC_lows, BIC_highs = [], [], []
-#     AIC_means, AIC_lows, AIC_highs = [], [], []
+    Returns:
+    --------
+    None
+        Displays tables and plots summarizing the BIC/AIC analysis for each Gaussian component count.
+    """
 
+    # Loads the saved results from the XD run
+    with open(saved_path, "rb") as f:
+        XD_results = pkl.load(f)
 
-#     for n_gauss in component_range:
-#         BIC_scores = [b for c, b in zip(XD_results["n_gauss"], XD_results["BIC"]) if c == n_gauss and b is not None]
-#         AIC_scores = [a for c, a in zip(XD_results["n_gauss"], XD_results["AIC"]) if c == n_gauss and a is not None]
+    # Extracts unique Gaussian component counts and define the range
+    component_range = (min(XD_results["n_gauss"]), max(XD_results["n_gauss"]))
+    n_gauss_list = np.array([n for n in range(component_range[0], component_range[1] + 1)])
 
-#         if BIC_scores and AIC_scores:
-#             BIC_means.append(np.min(BIC_scores))
-#             BIC_lows.append(np.percentile(BIC_scores, 25))
-#             BIC_highs.append(np.percentile(BIC_scores, 75))
+    # Determines the number of initializations and repeats
+    n_init = max(XD_results["init no"]) + 1
+    n_repeats = max(XD_results["repeat no."]) + 1
 
-#             AIC_means.append(np.min(AIC_scores))
-#             AIC_lows.append(np.percentile(AIC_scores, 25))
-#             AIC_highs.append(np.percentile(AIC_scores, 75))
+    # Creates a DataFrame summarising the number of failed XD runs per Gaussian component
+    n_XD_failed = [
+        sum([b is None for c, b in zip(XD_results["n_gauss"], XD_results["BIC"]) if c == n_gauss])
+        for n_gauss in n_gauss_list
+    ]
+    n_runs_gauss = np.array([n_repeats * n_init for _ in n_gauss_list])
+    n_failed_XD = pd.DataFrame({
+        "No. Gaussians": n_gauss_list,
+        "No. Failed XD runs": n_XD_failed,
+        "Total No. Runs": n_runs_gauss
+    })
 
-#     # Plotting
-#     fig, ax1 = plt.subplots(figsize=(10, 6))
+    # Prints a formatted table of the number of failed XD runs
+    print("Table of Number of Gaussians vs Number of Failed XD Runs")
+    print(tabulate(n_failed_XD, headers='keys', tablefmt='psql'))
 
-#     ax1.plot(unique_components, AIC_means, label="AIC", color="red", linewidth=2)
-#     ax1.fill_between(unique_components, AIC_lows, AIC_highs, color="red", alpha=0.3)
-#     ax1.set_xlabel("Number of Gaussian Components")
-#     ax1.set_ylabel("AIC", color="red")
-#     ax1.tick_params(axis='y', labelcolor="red")
+    # Reshapes BIC and AIC scores to 3D arrays: (n_gauss_components, n_repeats, n_init)
+    BIC_scores = np.array(XD_results['BIC']).reshape((len(n_gauss_list), n_repeats, n_init))
+    AIC_scores = np.array(XD_results['AIC']).reshape((len(n_gauss_list), n_repeats, n_init))
 
-#     ax2 = ax1.twinx()
-#     ax2.plot(unique_components, BIC_means, label="BIC", color="blue", linewidth=2)
-#     ax2.fill_between(unique_components, BIC_lows, BIC_highs, color="blue", alpha=0.3)
-#     ax2.set_ylabel("BIC", color="blue")
-#     ax2.tick_params(axis='y', labelcolor="blue")
+    # Compute means and standard deviations for BIC and AIC across initialisations
+    BIC_means, BIC_stds = np.mean(BIC_scores, axis=2), np.std(BIC_scores, axis=2)
+    AIC_means, AIC_stds = np.mean(AIC_scores, axis=2), np.std(AIC_scores, axis=2)
 
-#     # Highlight optimal BIC component
-#     optimal_component = unique_components[np.argmin(BIC_means)]
-#     ax1.axvline(optimal_component, linestyle='--', color='gray', label=f"Optimal BIC = {optimal_component}")
+    # Format mean ± stddev for BIC and AIC into DataFrames
+    BIC_means_stds_df = pd.DataFrame(
+        np.array([[f"{mean:.5f} \\pm {std:.5f}" for mean, std in zip(mean_row, std_row)]
+                  for mean_row, std_row in zip(BIC_means, BIC_stds)]),
+        columns=[f"Repeat {i + 1}" for i in range(n_repeats)],
+        index=n_gauss_list
+    )
+    BIC_means_stds_df.insert(0, "No. Gaussians", n_gauss_list)
 
-#     # Add zoomed-in inset
-#     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-#     axins = inset_axes(ax1, width="30%", height="30%", loc='upper right')
-#     axins.plot(unique_components, BIC_means, color="blue")
-#     axins.set_xlim(max(optimal_component - 1, unique_components[0]),
-#                    min(optimal_component + 1, unique_components[-1]))
-#     axins.set_ylim(min(BIC_means) - 500, min(BIC_means) + 500)
-#     axins.tick_params(labelleft=False, labelbottom=False)
+    AIC_means_stds_df = pd.DataFrame(
+        np.array([[f"{mean:.5f} \\pm {std:.5f}" for mean, std in zip(mean_row, std_row)]
+                  for mean_row, std_row in zip(AIC_means, AIC_stds)]),
+        columns=[f"Repeat {i + 1}" for i in range(n_repeats)],
+        index=n_gauss_list
+    )
+    AIC_means_stds_df.insert(0, "No. Gaussians", n_gauss_list)
 
-#     fig.suptitle("BIC and AIC Analysis for Extreme Deconvolution Results")
-#     ax1.legend(loc="upper left")
-#     plt.show()
+    # Print BIC and AIC summary tables
+    print("Table of BIC Means and Stds")
+    print(tabulate(BIC_means_stds_df, headers='keys', tablefmt='psql'))
 
+    print("Table of AIC Means and Stds")
+    print(tabulate(AIC_means_stds_df, headers='keys', tablefmt='psql'))
 
+    # Plot the lowest, highest, and median BIC and AIC scores for each component count
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 
-    
+    # Calculate min, max, and median BIC and AIC scores across repeats and initialisations for each Gaussian component count ie from n_init * n_repeats values - (n_gauss_components)
+    BIC_min, BIC_max, BIC_median = BIC_scores.min(axis=(1, 2)), BIC_scores.max(axis=(1, 2)), np.median(BIC_scores, axis=(1, 2))
+    AIC_min, AIC_max, AIC_median = AIC_scores.min(axis=(1, 2)), AIC_scores.max(axis=(1, 2)), np.median(AIC_scores, axis=(1, 2))
 
+    # Plot combined BIC & AIC
+    fig, ax = plt.subplots(figsize=(10, 6))
+    # BIC - Blue
+    ax.plot(n_gauss_list, BIC_min, 'b-', label="BIC - Lowest (Solid)")
+    ax.plot(n_gauss_list, BIC_max, 'b--', label="BIC - Highest (Dashed)")
+    ax.plot(n_gauss_list, BIC_median, 'b:', label="BIC - Median (Dotted)")
 
-#     # Convert the results to a pandas dataframe
-#     results_df = pd.DataFrame(results)
+    # AIC - Red
+    ax.plot(n_gauss_list, AIC_min, 'r-', label="AIC - Lowest (Solid)")
+    ax.plot(n_gauss_list, AIC_max, 'r--', label="AIC - Highest (Dashed)")
+    ax.plot(n_gauss_list, AIC_median, 'r:', label="AIC - Median (Dotted)")
 
-#     # Group the results by the number of gaussians and calculate the mean BIC score
-#     grouped_results = results_df.groupby("n_gauss").agg({"BIC": "mean"})
+    ax.set_xlabel("Number of Gaussian Components", fontsize=12)
+    ax.set_ylabel("Score", fontsize=12)
+    ax.set_title("BIC and AIC Score Analysis for Gaussian Components", fontsize=14)
+    ax.legend(loc='best')
+    ax.grid(True)
+    plt.tight_layout()
+    plt.show()
 
-#     # Plot the BIC scores
-#     plt.figure(figsize=(10, 6))
-#     plt.plot(grouped_results.index, grouped_results["BIC"], marker="o")
-#     plt.xlabel("Number of Gaussian Components")
-#     plt.ylabel("BIC Score")
-#     plt.title("BIC Score vs Number of Gaussian Components")
-#     plt.grid(True)
-#     plt.show()
-
-#     return None
+    return AIC_means_stds_df, BIC_means_stds_df
