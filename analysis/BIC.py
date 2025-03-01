@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from tabulate import tabulate
 import pandas as pd
 
@@ -9,7 +8,11 @@ import pickle as pkl
 
 from extreme_deconvolution import extreme_deconvolution
 from sklearn.preprocessing import StandardScaler
-from scipy.stats import multivariate_normal
+from scipy.stats import chi2, norm, gaussian_kde, multivariate_normal
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.patches import Ellipse
 
 from typing import List, Tuple, Optional, Union
 
@@ -30,16 +33,16 @@ class XDPipeline:
             ValueError: If `data_keys` and `data_err_keys` have mismatched lengths or contain missing columns.
         """
 
-        # Entry checks
-        # Check if data has column names and if so extract them accordingly
-        if hasattr(star_data, 'colnames'):  # For Astropy Table
-            colnames = star_data.colnames
-        elif hasattr(star_data, 'dtype') and hasattr(star_data.dtype, 'names'):  # For recarray (FITS)
-            colnames = star_data.dtype.names
-        elif isinstance(star_data, pd.DataFrame):  # For Pandas DataFrame
-            colnames = star_data.columns
-        else:
-            raise TypeError("Unsupported data type. Must have 'colnames', 'dtype.names' attribute, or be a Pandas DataFrame.")
+        # Convert all inputs to an Astropy Table for consistency
+        if isinstance(star_data, np.recarray):
+            star_data = Table(star_data)  # Convert recarray to Table
+        elif isinstance(star_data, pd.DataFrame):
+            star_data = Table.from_pandas(star_data)  # Convert DataFrame to Table
+        elif not isinstance(star_data, Table):
+            raise TypeError("Unsupported data type. Must be an Astropy Table, NumPy recarray, or Pandas DataFrame.")
+        
+        # Extract column names
+        colnames = star_data.colnames
         
         # Check that the number of data keys and error keys match
         if len(data_keys) != len(data_err_keys):
@@ -84,6 +87,8 @@ class XDPipeline:
         self.best_params = {}
         # The best (BIC/AIC) score for a filtered data set and the parameters in which it was achieved
         self.filtered_best_params = None
+        # Stores which of the above was used for the assignment
+        self.assignment_metric = None
 
 
 
@@ -350,10 +355,17 @@ class XDPipeline:
         # Delete any columns in self.star_data that are already present from past analysis
         # Search for keys
 
+        # Delete any existing probability assignments related entries to avoid conflicts
+        colnames = self.star_data.colnames
+
         # Delete any existing probability assignments to avoid conflicts
-        for key in list(self.star_data.keys()):
+        for key in colnames:
             if key.startswith('prob_gauss_') or key == 'max_gauss':
                 del self.star_data[key]
+
+
+        self.assignment_metric = None
+
         
 
         # This is preformed for all results ie all n_gauss, all repeats and all initialisations
@@ -384,7 +396,11 @@ class XDPipeline:
             if repeat_no_filter is not None:
                 mask &= (np.array(self.results_XD["repeat no."]) == repeat_no_filter)
 
-            filtered_results = {key: np.array(self.results_XD[key])[mask].tolist() for key in self.results_XD.keys()}
+            filtered_results = {}
+
+            for key, values in self.results_XD.items():
+                values_array = np.array(values, dtype=object)  # Ensure no shape enforcement
+                filtered_results[key] = [values_array[i] for i in range(len(mask)) if mask[i]]
             # Filter the dictionary and only keep relevent results
 
             # Identifies the best BIC/AIC score
@@ -405,9 +421,9 @@ class XDPipeline:
             print(f" The following filters were applied: {self.filtered_best_params['filters']}")
             # summary of results they returned
             print(f" Best {opt_metric} Score from filtered inputs: {self.filtered_best_params['score']:.4f} occurred at:")
-            print(f"   - Gaussian Components (n_gauss): {self.best_params['gauss_components']}")
-            print(f"   - Repeat cycle (n): {self.best_params['repeat']}")
-            print(f"   - Initialisation (i): {self.best_params['init']}")
+            print(f"   - Gaussian Components (n_gauss): {self.filtered_best_params['gauss_components']}")
+            print(f"   - Repeat cycle (n): {self.filtered_best_params['repeat']}")
+            print(f"   - Initialisation (i): {self.filtered_best_params['init']}")
 
         else: 
             self.filtered_best_params = None
@@ -492,7 +508,7 @@ class XDPipeline:
 
         return None
     
-    def assigment_XD(self, assigment_metric = 'best'): 
+    def assigment_XD(self, assignment_metric = 'best'): 
         """
         Assign stars to Gaussian components based on the best-fit XD model.
         Computes the responsibility of each gaussians for each star and assigns it accordingly.
@@ -517,43 +533,44 @@ class XDPipeline:
                 - `max_gauss`: Index of the component with the highest probability (1-based index).
         """
 
+        # Ensure that all previous analysis has been preformed. 
 
         if self.results_XD is None:
             raise ValueError("No XD results found in class. Please run XD and analysis first or provide valid path to load from in the analysis method.")
         
-        if assigment_metric not in ['best', 'best filtered']:
-            raise ValueError("Invalid assignment metric selected. Please select either 'best' or 'best filtered'.")
-        
-        if assigment_metric == 'filtered' and self.filtered_best_params is None:
+        if assignment_metric == 'best filtered' and self.filtered_best_params is None:
             raise ValueError("No filtered best parameters found. Please run filtered analysis first.")
         
-        if assigment_metric == 'best' and self.best_params == {}:
+        elif assignment_metric == 'best' and self.best_params == {}:
             raise ValueError("No best parameters found. Please run analysis first.")
         
-        elif self.best_BIC_score is None:
-            raise ValueError("No best BIC score found. Please run BIC analysis first.")
+        elif assignment_metric not in ['best', 'best filtered']:
+            raise ValueError("Invalid assignment metric selected. Please select either 'best' or 'best filtered'.")
         
-        # Delete any columns in self.star_data that are already present from past analysis
-        # Search for keys
-        for key in self.star_data.keys():
-            if key[:11] == 'prob_gauss_':
+        # Delete any existing probability assignments related entries to avoid conflicts
+        colnames = self.star_data.colnames
+
+        # Delete any existing probability assignments to avoid conflicts
+        for key in colnames:
+            if key.startswith('prob_gauss_') or key == 'max_gauss':
                 del self.star_data[key]
-        if 'max_gauss' in self.star_data.keys():
-            del self.star_data['max_gauss']
+
+        # Allow storage of which assignment metric was used for future reference
+        self.assignment_metric = assignment_metric
         
         # Extract the results of relevent analysis locally
-        if assigment_metric == 'filtered':
-            assigment_params = self.filtered_best_params
-        if assigment_metric == 'best filtered':
-            assigment_params = self.best_params
+        if assignment_metric == 'best filtered':
+            assignment_params = self.filtered_best_params
+        if assignment_metric == 'best':
+            assignment_params = self.best_params
 
         # Print a summary of what this is preforming
-        print(f"Assigning stars to Gaussian components based on the {assigment_metric} XD model.")
-        print(f"This has been optimised for the {assigment_params['metric']} score and returned the results:")
-        print(f" Best {assigment_params['metric']} Score: {assigment_params['score']:.4f} occurred at:")
-        print(f"   - Gaussian Components (n_gauss): {assigment_params['gauss_components']}")
-        print(f"   - Repeat cycle (n): {assigment_params['repeat']}")
-        print(f"   - Initialisation (i): {assigment_params['init']}")
+        print(f"Assigning stars to Gaussian components based on the {assignment_metric} XD model.")
+        print(f"This has been optimised for the {assignment_params['metric']} score and returned the results:")
+        print(f" Best {assignment_params['metric']} Score: {assignment_params['score']:.4f} occurred at:")
+        print(f"   - Gaussian Components (n_gauss): {assignment_params['gauss_components']}")
+        print(f"   - Repeat cycle (n): {assignment_params['repeat']}")
+        print(f"   - Initialisation (i): {assignment_params['init']}")
 
         # Error-Aware Explanation:
         # Cannot evaluate the probability density at position in parameter space deirectly
@@ -563,7 +580,7 @@ class XDPipeline:
         #     T  = V + Xerr
         
         # Initialises columns for probabilities and assignments
-        for i in range(assigment_params['gauss_components']):
+        for i in range(assignment_params['gauss_components']):
             self.star_data[f'prob_gauss_{i+1}'] = np.zeros(len(self.star_data))
             self.star_data['max_gauss'] = np.zeros(len(self.star_data), dtype=int)
 
@@ -573,12 +590,12 @@ class XDPipeline:
             # Extract the measurement error covariance for the current star and conver it to a diagonal matrix
             star_errors = np.diag(self.errors_data[star_index])
             # Cycle through each of the gaussinas from the n_gauss
-            for j in range(assigment_params['gauss_components']):
+            for j in range(assignment_params['gauss_components']):
                 # Mean covariance and weight for the jth gaussian
-                mean_j = self.best_XD_means[j]
+                mean_j = assignment_params['XD_means'][j]
                 # Error-Aware Covariance Adjustment
-                cov_j = self.best_XD_covariances[j] + star_errors
-                weight_j = self.best_XD_weights[j]
+                cov_j = assignment_params['XD_covariances'][j] + star_errors
+                weight_j = assignment_params['XD_weights'][j]
 
                 # Calculate the probability of the data point given the gaussian
                 try:
@@ -594,4 +611,204 @@ class XDPipeline:
 
         return None
 
-    def plotting_XD(self):
+    
+    def plot_XD(self, x_key: str, y_key: str, z_score: Optional[float] = 2) -> None:
+        """
+        Generate a 2D plot of the Extreme Deconvolution (XD) results, showing the Gaussian components
+        as ellipses and individual stars colored by their assigned Gaussian component.
+
+        The plot mimics a corner plot style with marginal histograms for both x and y variables.
+
+        Parameters
+        ----------
+        x_key : str
+            The key for the x-axis parameter (must exist in data_keys).
+        y_key : str
+            The key for the y-axis parameter (must exist in data_keys).
+
+        Raises
+        ------
+        ValueError
+            If XD results are missing or if invalid keys are provided.
+        """
+
+        # Ensures analysis has been run before plotting
+        if self.assignment_metric is None:
+            raise ValueError("No assignment metric found. Please run assignment method first.")
+
+        # Ensures that the keys provided are valid
+        if x_key not in self.data_keys or y_key not in self.data_keys:
+            raise ValueError("Invalid keys. Please provide valid keys from the data table (i.e., exist in data_keys).")
+
+        # Extracts the relevant parameters depending on the assignment metric used during assignment_XD
+        if self.assignment_metric == 'best':
+            assignment_params = self.best_params 
+        elif self.assignment_metric == 'best filtered':
+            assignment_params = self.filtered_best_params
+
+        # Extracts GMM parameters from the relevant best-fit analysis
+        means = assignment_params['XD_means']
+        covariances = assignment_params['XD_covariances']
+        weights = assignment_params['XD_weights']
+        n_components = assignment_params['gauss_components']
+
+        # Retrieves relevant keys index positions - allows extraction of relevent data
+        # Ie Star data features for the x and y axis , relevent means and covariance values from the XD analysis per gaussian
+        x_index = self.data_keys.index(x_key)
+        y_index = self.data_keys.index(y_key)
+
+        # Extracts the individual star data
+        x_data = self.feature_data[:, x_index]
+        y_data = self.feature_data[:, y_index]
+
+        # Extracts each stars assigned gaussian component - for colouring by component 
+        assignments = self.star_data['max_gauss']
+
+        # Defines colors for different components
+        colors = sns.color_palette("husl", n_components)
+
+        # Defines grid for subplots 
+        fig = plt.figure(figsize=(8, 8))
+        # Scatter plot - bottom left
+        ax_main = plt.axes([0.1, 0.1, 0.65, 0.65]) 
+        # Horizontal histogram - top left
+        ax_histx = plt.axes([0.1, 0.76 , 0.65, 0.14]) 
+        # Vertical histogram - bottom right
+        ax_histy = plt.axes([0.76, 0.1, 0.14, 0.65])
+        # Weight bar plot - top right
+        ax_bar = plt.axes([0.76, 0.76, 0.14, 0.14])
+
+        # Main scatter plot - with stars coloured by their assigned Gaussian component
+        ax_main.scatter(x_data, y_data, c=[colors[i-1] for i in assignments], s=5, alpha=0.5)
+        ax_main.set_xlabel(x_key)
+        ax_main.set_ylabel(y_key)
+
+        # Plots Gaussian components as ellipses
+        for i in range(n_components):
+            # Extracts relevant features (x, y) from the mean vector of the i-th Gaussian component
+            mean = means[i, [x_index, y_index]]
+
+            # Extracts the 2x2 covariance sub-matrix for (x, y) from the full covariance matrix of the i-th Gaussian component
+            # Defines the spread and correlation for (x, y)
+            cov = covariances[i][[x_index, y_index], :][:, [x_index, y_index]] 
+
+            # Calculates the eigenvalues and eigenvectors of covariance matrix
+            # Eigenvalues: length of major and minor axis of the ellipse
+            # Eigenvectors: orientation of the major and minor axis of the ellipse - angles
+            eigvals, eigvecs = np.linalg.eigh(cov)
+
+            # Sorts eigenvalues in descending order - Larger eigenvalues: major axis variance, smaller eigenvalues: minor axis variance
+            # Corresponding eigenvectors: major and minor axis orientation
+            order = np.argsort(eigvals)[::-1]
+            eigvals, eigvecs = eigvals[order], eigvecs[:, order]
+
+            # Converts eigenvectors of major axis to angle in degrees
+            angle = np.degrees(np.arctan2(*eigvecs[:, 0][::-1]))  
+
+            # Computes width and height of the ellipse from variances (eigenvalues)
+            width, height = 2 * np.sqrt(eigvals)  
+
+            # Scales the ellipse using the desired z score/ confidence interval by scaling the width and height 
+            scale_factor = np.sqrt(chi2.ppf(norm.cdf(z_score) * 2 - 1, df=2))
+            width *= scale_factor
+            height *= scale_factor
+
+            # Adds the ellipse patch to the plot using the mean(centre), width, height and angle
+            ellipse = Ellipse(
+                xy=(mean[0], mean[1]),  
+                width=width, height=height,  
+                angle=angle, edgecolor=colors[i], facecolor='none', linewidth=2
+            )
+            ax_main.add_patch(ellipse)
+
+
+        # Defines histogram bins edges using data range
+        bins_x = np.linspace(np.min(x_data), np.max(x_data), 25)
+        bins_y = np.linspace(np.min(y_data), np.max(y_data), 25)
+
+        bin_width_x = np.diff(bins_x)[0]
+        bin_width_y = np.diff(bins_y)[0]
+
+        # Computes histograms for grey bars (scaled correctly)
+        hist_x, _, _ = ax_histx.hist(x_data, bins=bins_x, color='gray', alpha=0.5)
+        hist_y, _, _ = ax_histy.hist(y_data, bins=bins_y, color='gray', alpha=0.5, orientation='horizontal')
+        ax_histx.set_xticks([])
+        ax_histy.set_yticks([])
+
+        # Defines a range for plotting 1D Gaussians
+        x_1_gauss= np.linspace(np.min(x_data), np.max(x_data), 300)
+        y_1_gauss = np.linspace(np.min(y_data), np.max(y_data), 300)
+
+        # Initialises sum of Gaussians for total distribution
+        total_gauss_x = np.zeros_like(x_1_gauss)
+        total_gauss_y = np.zeros_like(y_1_gauss)
+
+        # Plot individual 1D Gaussian components
+        for i in range(n_components):
+            # Retrieve mean and standard deviation for x and y from the i-th Gaussian component
+            mean_x, mean_y = means[i, x_index], means[i, y_index]
+            std_x, std_y = np.sqrt(covariances[i][x_index, x_index]), np.sqrt(covariances[i][y_index, y_index])
+
+            # Fraction of total samples assigned to i-th Gaussian
+            component_weight = weights[i]
+            # Match histogram area
+            scale_factor_gauss = np.sum(hist_x) * component_weight
+
+            # Evaluate Gaussian over many full range of x and y
+            gauss_x = norm.pdf(x_1_gauss, mean_x, std_x) * scale_factor_gauss * bin_width_x
+            gauss_y = norm.pdf(y_1_gauss, mean_y, std_y) * scale_factor_gauss * bin_width_y
+
+            # Add i-th Gaussian to overall gaussian sum distribution
+            total_gauss_x += gauss_x
+            total_gauss_y += gauss_y
+
+            # Add plot of i-th Gaussian component
+            ax_histx.plot(x_1_gauss, gauss_x, color=colors[i], alpha=0.7)
+            ax_histy.plot(gauss_y, y_1_gauss, color=colors[i], alpha=0.7)
+
+        # Plot overall gaussian sum distribution (black)
+        ax_histx.plot(x_1_gauss, total_gauss_x, color='black', linewidth=2)
+        ax_histy.plot(total_gauss_y, y_1_gauss, color='black', linewidth=2)
+
+        # Initialise KDE probability distribution for each axis
+        kde_x_func = gaussian_kde(x_data, bw_method='scott')
+        kde_y_func = gaussian_kde(y_data, bw_method='scott')
+
+        # Scale by area of histogram to match histrograma and 1D gaussian scales
+        kde_x = kde_x_func(x_1_gauss) * np.sum(hist_x) * bin_width_x
+        kde_y = kde_y_func(y_1_gauss) * np.sum(hist_y) * bin_width_y
+        
+        # Plot KDE distributions
+        ax_histx.plot(x_1_gauss, kde_x, color='red', linestyle='dashed', linewidth=2, label="KDE from Histogram")
+        ax_histy.plot(kde_y, y_1_gauss, color='red', linestyle='dashed', linewidth=2)
+
+        # TOP RIGHT - Bar chart of relative weights
+        # Reorder weights of components by ascending size and respective colors
+        sort_weight_indices = np.argsort(weights)
+        sorted_weights = weights[sort_weight_indices]
+        sorted_colors = [colors[i] for i in sort_weight_indices]
+
+        # Plot bats
+        bars = ax_bar.bar(range(n_components), sorted_weights * 100, color=sorted_colors)
+
+        # Add text labeling weight as percentage on top of each bar
+        for bar, weight in zip(bars, sorted_weights * 100):
+            ax_bar.text(
+                bar.get_x() + bar.get_width() / 2,
+                0,
+                f" {weight:.1f}%", 
+                ha='center', va='bottom',
+                fontsize=8,
+                color='black',
+                rotation=90 
+            )
+
+        # Remove axis labels and ticks
+        ax_bar.set_yticks([])
+        ax_bar.set_yticklabels([])
+        ax_bar.set_ylabel("")
+        ax_bar.set_xticks([])
+
+        plt.show()
+
+        return None
