@@ -18,6 +18,79 @@ from typing import List, Tuple, Optional, Union
 
 class XDPipeline:
     """
+    A pipeline for performing Extreme Deconvolution (XD) using a Gaussian Mixture Model (GMM).
+
+    Aims at analysing and fitting multi-dimensional stellar datasets.
+
+    The pipeline follows these key steps:
+    
+    1. **Initialization** (`__init__`):
+       - Takes in stellar data as an Astropy Table, NumPy recarray, or Pandas DataFrame.
+       - Extracts relevant features defined by `data_keys` and their errors `data_err_keys`.
+
+    2. **Extreme Deconvolution (XD)** (`run_XD`):
+       - Normalises the dataset for efficient convergence.
+       - Runs XD over a specified range of Gaussian components.
+       - Iterates through multiple random initialisations to ensure robust fitting.
+       - Uses BIC and AIC scores to evaluate model performance.
+       - Optionally saves results to a file for later analysis.
+
+    3. **Model Comparison & Selection** (`compare_XD`):
+       - Compares different XD runs using Bayesian Information Criterion (BIC) or Akaike Information Criterion (AIC).
+       - Identifies the best-fit model based on BIC or AIC scores.
+       - Supports filtering results by a specific number of components or repeat cycle.
+       - Generates a summary of failed runs and visualises scores across different components.
+
+    4. **Star Assignment to Gaussian Components** (`assigment_XD`):
+       - Computes each star's probability of belonging to each Gaussian component (responsibilities).
+       - Assigns each star to the most probable Gaussian component.
+       - Accounts for measurement uncertainties by modifying covariance matrices (error-aware).
+
+    5. **Results Table** (`table_results_XD`):
+       - Constructs a summary table showing the properties of each Gaussian component.
+       - Displays and outputs estimated weights, assigned star counts, and mean ± standard deviation for each parameter.
+
+    6. **Plotting Results** (`plot_XD`):
+       - Generates a 2D scatter plot with color-coded Gaussian assignments.
+       - Overlays Gaussian components as confidence ellipses (scaled by a z-score for different confidence levels).
+       - Displays marginal histograms and Kernel Density Estimation (KDE) plots for feature distributions.
+       - Includes a bar chart representing the relative weight of each Gaussian component.
+
+    Parameters
+    ----------
+    star_data : Table, np.recarray, pd.DataFrame
+        Input dataset containing stellar observations and features.
+    data_keys : List[str]
+        List of feature name keys to be used for fitting the Gaussian Mixture Model.
+    data_err_keys : List[str]
+        List of measurement uncertainty keys corresponding to feature keys.
+
+    Attributes
+    ----------
+    star_data : Table
+        The input dataset - converted to an Astropy Table upon import.
+    feature_data : np.ndarray
+        Extracted feature values for model fitting.
+    errors_data : np.ndarray
+        Measurement errors associated with each feature.
+    n_samples : int
+        Number of stars (data points) in the dataset.
+    n_features : int
+        Number of features used in the XD model.
+    results_XD : dict or None
+        Dictionary storing the results of XD fitting across different initialisations.
+    best_params : dict
+        Best-performing XD model parameters based on the chosen optimisation metric.
+    filtered_best_params : dict or None
+        Best-performing parameters after applying user-defined filters (e.g., fixed number of components).
+    assignment_metric : str or None
+        Specifies whether the assignments were based on the "best" or "best filtered" model.
+
+    Notes
+    -----
+    - The pipeline scales input data using `StandardScaler` before fitting, ensuring numerical stability.
+    - Measurement uncertainties are incorporated into the covariance matrices during model fitting.
+    - The pipeline supports saving/loading XD results for reproducibility.
     """
     def __init__(self, star_data: Union[Table, np.recarray, pd.DataFrame], data_keys: List[str], data_err_keys: List[str]):
         """
