@@ -610,26 +610,95 @@ class XDPipeline:
             self.star_data['max_gauss'][star_index] = np.argmax(probabilities) + 1
 
         return None
+    
+    def table_results_XD(self) -> pd.DataFrame:
+        """
+        Generate a summary table of the Extreme Deconvolution (XD) results showing the mean and error values of each gaussian in high dimensional space.
+
+        For each gaussian the table includes:
+        - Component Name (indexed numerically)
+        - XD assigned Weight (%)
+        - Count of assigned stars to (should reflect the weights)
+        - Mean values and standard deviations for each feature parameter
+
+        Returns
+        -------
+        pd.DataFrame
+            A formatted summary of the Gaussian components fitted by XD.
+        """
+
+        # Ensure that the analysis has been run before generating the table
+        if self.assignment_metric is None:
+            raise ValueError("No assignment metric found. Please run assignment method first, which requires XD and analysis/comparison to be run first.")
+        
+        # Extract the relevant parameters depending on the assignment metric used during assignment_XD
+        if self.assignment_metric == 'best':
+            assignment_params = self.best_params 
+        elif self.assignment_metric == 'best filtered':
+            assignment_params = self.filtered_best_params
+
+        # Extract Gaussian mixture parameters
+        means = assignment_params['XD_means']
+        covariances = assignment_params['XD_covariances']
+        weights = assignment_params['XD_weights']
+        n_components = assignment_params['gauss_components']
+        
+        # Count how many stars are assigned to each Gaussian component
+        component_counts = np.array([(self.star_data['max_gauss'] == i+1).sum() for i in range(n_components)])
+
+        # Construct table
+        table_data = {
+            "Component": [f"Component {i+1}" for i in range(n_components)],
+            "Weight (%)": np.round(weights * 100, 1),
+            "Count": component_counts
+        }
+
+        # Add each feature parameter's mean and standard deviation
+        for i, key in enumerate(self.data_keys):
+            mean_values = means[:, i]
+            # Standard deviation from covariance matrix's diagonal (square rooted)
+            std_values = np.sqrt(covariances[:, i, i]) 
+            table_data[key] = [f"{mean:.2f} ± {std:.2f}" for mean, std in zip(mean_values, std_values)]
+
+        # Convert to DataFrame
+        results_df = pd.DataFrame(table_data)
+
+        # Sort the table by Weight (%) in descending order
+        results_df = results_df.sort_values(by="Weight (%)", ascending=False).reset_index(drop=True)
+
+        # Print formatted table
+        print("\nSummary of GMM Fit Result for GALAH-Gaia Sample")
+        print(tabulate(results_df, headers="keys", tablefmt="grid"))
+
+        return results_df
 
     
     def plot_XD(self, x_key: str, y_key: str, z_score: Optional[float] = 2) -> None:
         """
-        Generate a 2D plot of the Extreme Deconvolution (XD) results, showing the Gaussian components
-        as ellipses and individual stars colored by their assigned Gaussian component.
+        Creates a 2D plot of the Extreme Deconvolution (XD) results, displaying:
+        - Individual stars colored by their assigned Gaussian component
+        - Gaussian mixture model (GMM) components as confidence ellipses
+        - Marginal histograms and KDE distributions for each axis
+        - A bar chart representing the relative weight of each Gaussian component
 
-        The plot mimics a corner plot style with marginal histograms for both x and y variables.
+        The confidence ellipses are scaled according to a given z-score, providing 
+        a visual representation of the spread of each Gaussian component.
 
         Parameters
         ----------
         x_key : str
-            The key for the x-axis parameter (must exist in data_keys).
+            The column name corresponding to the x-axis variable.
         y_key : str
-            The key for the y-axis parameter (must exist in data_keys).
+            The column name corresponding to the y-axis variable.
+        z_score : float, optional
+            The z-score defining the confidence interval for the Gaussian ellipses.
+            Defaults to 2, corresponding to a 95% confidence interval.
 
         Raises
         ------
         ValueError
-            If XD results are missing or if invalid keys are provided.
+            If the XD analysis has not been performed before plotting.
+            If the provided x_key or y_key is not found in the dataset.
         """
 
         # Ensures analysis has been run before plotting
