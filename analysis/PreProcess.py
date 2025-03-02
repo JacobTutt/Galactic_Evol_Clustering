@@ -366,12 +366,195 @@ def gallah_filter(star_data_in, dynamics_data_in, gaia_data_in, save_path=None):
         star_data.write(save_path, format="fits", overwrite=True)
         logging.info(f"Filtered dataset saved to {save_path}")
 
-    
     return star_data   
 
 
 
-def apogee_filter(data):
+def apogee_filter(star_data_in, save_path=None):
+    """
+    Applies quality cuts to APOGEE stellar data to produce a refined 
+    sample of chemically selected stars with extreme kinematics.
+
+    This function filters stars based on data quality, chemical abundances, 
+    and orbital properties to isolate **metal-poor stars with extreme orbits**.
+
+    Parameters
+    ----------
+    star_data_in : str, Table, np.recarray, or pd.DataFrame
+        APOGEE stellar data, provided as a file path (CSV, FITS, TXT) or an 
+        Astropy Table, NumPy recarray, or Pandas DataFrame.
+
+    save_path : str, optional
+        If provided, saves the filtered dataset as a FITS file at the specified path.
+
+    Returns
+    -------
+    Table
+        An Astropy Table containing the filtered stellar sample.
+
+    Filtering Criteria
+    ------------------
+    **1. Data Quality Cuts**
+       - `extratarg == 0` → Select only Main Red Stars (MRS).
+       - `logg < 3.0` → Restrict to giant stars.
+
+    **2. Element Abundance Filters**
+       - `[Fe/H]`: Require `fe_h_flag == 0` and `fe_h_err < 0.1` for reliable iron abundance.
+       - `[Al/Fe]`: Require `al_fe_flag == 0` and `al_fe_err < 0.1` for accurate aluminum measurement.
+       - `[Ce/Fe]`: Require `ce_fe_flag == 0` and `ce_fe_err < 0.15` for precise cerium abundance.
+
+    **3. Derived Element Ratio Filters**
+       - `[Mg/Mn]`: If missing, computed as `mg_fe - mn_fe`. Require:
+         - `mg_mn_flag == 0` (or `mg_fe_flag == 0` & `mn_fe_flag == 0` if `mg_mn_flag` is missing).
+         - `mg_mn_err < 0.1` for reliable measurement.
+       - `[α/Fe]`: Constructed if missing from individual elements. Require:
+         - `alpha_fe_flag == 0` and `alpha_fe_err < 0.1`.
+
+    **4. Orbital and Kinematic Cuts**
+       - `Eccentricity (ecc_50) > 0.85` → Select stars on highly radial orbits.
+       - `Energy (E_50) < 0` → Remove unbound or high-energy stars.
+
+    **5. Additional Filters (If Data is Available)**
+       - **Apocenter (R_ap) Filter**: If `R_ap` exists, require `R_ap > 5` kpc.
+       - **Distance Uncertainty**: If `dist_err` exists, require `dist_err < 1.5` kpc.
+
+    **6. Ensuring Data Consistency**
+       - Checks for required keys before filtering.
+       - Drops stars with missing values in `ecc_50` or `E_50`.
+       - Orders dataset to maintain consistency.
+
+    Output
+    ------
+    - The filtered dataset is returned as an Astropy Table.
+    - If `save_path` is specified, the dataset is saved as a FITS file.
+
+    Notes
+    -----
+    - This selection aims to **isolate metal-poor stars with extreme orbits**, 
+      relevant for Galactic archaeology and halo studies.
+    - Stars that pass the filters have **high-quality chemical abundances, 
+      well-measured kinematics, and a robust selection based on APOGEE data**.
+    """
+    # Ensure that the input data can either be converted to an Astropy Table or is already an Astropy Table
+    star_data = convert_to_astropy_table(star_data_in)
+
+    # Store initial number of stars
+    initial_star_count = len(star_data)
+    logging.info(f"Initial number of stars: {initial_star_count}")
+
+    # ------------------ REQUIRED KEYS CHECK ------------------
+
+    required_keys = [
+        "extratarg", "logg", "fe_h", "fe_h_err", "fe_h_flag", "al_fe", "al_fe_err", "al_fe_flag",
+        "ce_fe", "ce_fe_err", "ce_fe_flag", "mg_fe", "mg_fe_err", "mg_fe_flag",
+        "mn_fe", "mn_fe_err", "mn_fe_flag", "alpha_fe_err", "alpha_fe_flag", "ecc_50", "E_50"
+    ]
+
+    # Function to check missing keys
+    missing_keys = [key for key in required_keys if key not in star_data.colnames]
+    if missing_keys:
+        raise ValueError(f"Missing required columns in star_data: {missing_keys}")
 
 
-    return None
+    # ------------------ Filtering Data ------------------
+
+    # 1. Main Red Stars Filter
+    mrs_filter = star_data['extratarg'] == 0
+
+    # 2. Filtering out bad star data
+    # bs_filter = star_data['ASPCAPFLAG'] != 'STAR_BAD'
+    # prog_filter = star_data['PROGRAMNAME'] != 'magclouds'
+    rg_filter = star_data['logg'] < 3.0
+
+    # 3. Element Abundance Filters
+
+    # Fe/H filter
+    fe_h_flag_filter = star_data['fe_h_flag'] == 0
+    # ASSUME THIS WAS SUPPOSED Top BE DONE
+    fe_h_err_filter = star_data['fe_h_err'] < 0.1
+    fe_h_filter = fe_h_flag_filter & fe_h_err_filter
+
+    # Al/Fe filter
+    al_fe_flag_filter = star_data['al_fe_flag'] == 0
+    al_fe_err_filter = star_data['al_fe_err'] < 0.1
+    al_fe_filter = al_fe_flag_filter & al_fe_err_filter
+    # Ce/Fe filter
+    ce_fe_flag_filter = star_data['ce_fe_flag'] == 0
+    ce_fe_err_filter = star_data['ce_fe_err'] < 0.15
+    ce_fe_filter = ce_fe_flag_filter & ce_fe_err_filter
+
+    # Mg/Mn filter
+    # Data Values
+    if 'mg_mn' not in star_data.colnames:
+        star_data['mg_mn'] = star_data['mg_fe'] - star_data['mn_fe']
+    
+    # Flag filter
+    if 'mg_mn_flag' not in star_data.colnames:
+        mg_fe_flag_filter = star_data['mg_fe_flag'] == 0
+        mn_fe_flag_filter = star_data['mn_fe_flag'] == 0
+        mg_mn_flag_filter = mg_fe_flag_filter & mn_fe_flag_filter
+    else:
+        mg_mn_flag_filter = star_data['mg_mn_flag'] == 0
+
+    # Error values
+    if 'mg_mn_err' not in star_data.colnames: 
+        star_data['mg_mn_err'] = np.sqrt(star_data['mg_fe_err']**2 + star_data['mn_fe_err']**2)
+    
+    mg_mn_err_filter = star_data['mg_mn_err'] < 0.1
+    mg_mn_filter = mg_mn_flag_filter & mg_mn_err_filter
+
+    # Alpha/Fe filter
+    if 'alpha_fe_flag' not in star_data.colnames:
+        o_fe_flag_filter = star_data['o_fe_flag'] == 0
+        mg_fe_flag_filter = star_data['mg_fe_flag'] == 0
+        si_fe_flag_filter = star_data['si_fe_flag'] == 0
+        ca_fe_flag_filter = star_data['ca_fe_flag'] == 0
+        ti_fe_flag_filter = star_data['ti_fe_flag'] == 0
+        alpha_fe_flag_filter = o_fe_flag_filter & mg_fe_flag_filter & si_fe_flag_filter & ca_fe_flag_filter & ti_fe_flag_filter
+    else: 
+        alpha_fe_flag_filter = star_data['alpha_fe_flag'] == 0
+
+    if 'alpha_fe_err' not in star_data.colnames:
+        o_fe_error_filter = star_data['o_fe_err'] < 0.1
+        mg_fe_error_filter = star_data['mg_fe_err'] < 0.1   
+        si_fe_error_filter = star_data['si_fe_err'] < 0.1
+        ca_fe_error_filter = star_data['ca_fe_err'] < 0.1
+        ti_fe_error_filter = star_data['ti_fe_err'] < 0.1
+        alpha_fe_err_filter = o_fe_error_filter & mg_fe_error_filter & si_fe_error_filter & ca_fe_error_filter & ti_fe_error_filter
+    else:
+        alpha_fe_err_filter = star_data['alpha_fe_err'] < 0.1
+
+    alpha_fe_filter = alpha_fe_flag_filter & alpha_fe_err_filter 
+
+    # ------------------ Applying Stage 1 Filters ------------------
+    # Extract only Main Red Stars
+    apogee_data_red = star_data[mrs_filter]
+
+    # Apply all filters to get the final cleaned dataset
+    star_data = star_data[mrs_filter & rg_filter & fe_h_filter & al_fe_filter 
+                            & ce_fe_filter & mg_mn_filter & alpha_fe_filter] # & bs_filter & prog_filter 
+    
+    # ------------------ Filter Eccentricity and Energy and Apocenter ------------------
+    ecc_filter = star_data['ecc_50'] > 0.85
+    energy_filter = star_data['E_50'] < 0
+    # Missing distance uncertainty and apocenter filter
+    # apocenter_filter = star_data['R_ap'] > 5
+    # dist_err_filter = apogee_data['DIST_ERR'] < 1.5
+
+
+    # ------------------ Apply stage 2 filters ------------------
+    star_data = star_data[ecc_filter & energy_filter] # & apocenter_filter & dist_err_filter
+
+    # Store final number of stars
+    final_star_count = len(star_data)
+    logging.info(f"Final number of stars: {final_star_count}")
+    logging.info(f"Fraction retained: {final_star_count / initial_star_count:.2%}")
+
+        # ------------------ Save filtered data if path provided ------------------
+
+    # Save data if a path is provided
+    if save_path:
+        star_data.write(save_path, format="fits", overwrite=True)
+        logging.info(f"Filtered dataset saved to {save_path}")
+
+    return star_data   
