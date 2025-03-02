@@ -1,15 +1,19 @@
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 import os
-import logging
-import warnings
 
-from astropy.table import Table
+from astropy.io import fits
+from astropy.table import Table, vstack
+from astroquery.gaia import Gaia
 from astropy import units as u
-from astropy.units import UnitsWarning
+from astropy.table import join
 
 from scipy.stats import norm
+import warnings
+from astropy.units import UnitsWarning
 
+import logging
 logging.basicConfig(level=logging.INFO)
 
 def convert_to_astropy_table(data):
@@ -371,7 +375,7 @@ def gallah_filter(star_data_in, dynamics_data_in, gaia_data_in, save_path=None):
 
 
 
-def apogee_filter(star_data_in, save_path=None):
+def apogee_filter(star_data_in, SQL=False, save_path=None):
     """
     Applies quality cuts to APOGEE stellar data to produce a refined 
     sample of chemically selected stars with extreme kinematics.
@@ -379,11 +383,19 @@ def apogee_filter(star_data_in, save_path=None):
     This function filters stars based on data quality, chemical abundances, 
     and orbital properties to isolate **metal-poor stars with extreme orbits**.
 
+    If `SQL=True`, Gaia DR3 distances are queried using the **astroquery** package, 
+    and an additional filtering step removes stars with large distance errors.
+
     Parameters
     ----------
     star_data_in : str, Table, np.recarray, or pd.DataFrame
         APOGEE stellar data, provided as a file path (CSV, FITS, TXT) or an 
         Astropy Table, NumPy recarray, or Pandas DataFrame.
+
+    SQL : bool, optional
+        If `True`, queries Gaia DR3 for distances using `astroquery.gaia` 
+        and applies additional filtering based on distance uncertainties.
+        Defaults to `False`.
 
     save_path : str, optional
         If provided, saves the filtered dataset as a FITS file at the specified path.
@@ -415,14 +427,17 @@ def apogee_filter(star_data_in, save_path=None):
        - `Eccentricity (ecc_50) > 0.85` → Select stars on highly radial orbits.
        - `Energy (E_50) < 0` → Remove unbound or high-energy stars.
 
-    **5. Additional Filters (If Data is Available)**
-       - **Apocenter (R_ap) Filter**: If `R_ap` exists, require `R_ap > 5` kpc.
-       - **Distance Uncertainty**: If `dist_err` exists, require `dist_err < 1.5` kpc.
+    **5. Additional Filters (If SQL=True)**
+       - Queries **Gaia DR3** for distances (`r_med_photogeo`, `r_lo_photogeo`, `r_hi_photogeo`).
+       - **Distance Uncertainty Cut**: Rejects stars with:
+         - `(r_hi_photogeo - r_med_photogeo) < 1500` pc (upper bound uncertainty)
+         - `(r_med_photogeo - r_lo_photogeo) < 1500` pc (lower bound uncertainty)
 
     **6. Ensuring Data Consistency**
        - Checks for required keys before filtering.
        - Drops stars with missing values in `ecc_50` or `E_50`.
        - Orders dataset to maintain consistency.
+       - Ensures Gaia ID (`GAIAEDR3_SOURCE_ID` or `dr3_source_id`) is present when `SQL=True`.
 
     Output
     ------
@@ -450,6 +465,20 @@ def apogee_filter(star_data_in, save_path=None):
         "ce_fe", "ce_fe_err", "ce_fe_flag", "mg_fe", "mg_fe_err", "mg_fe_flag",
         "mn_fe", "mn_fe_err", "mn_fe_flag", "alpha_fe_err", "ecc_50", "E_50"
     ]
+
+    # If  SQL requirement is true, add the Gaia ID column - whether that be `GAIAEDR3_SOURCE_ID` or `dr3_source_id`
+    if SQL:
+        # Check if `GAIAEDR3_SOURCE_ID` or `dr3_source_id` exists
+        if "GAIAEDR3_SOURCE_ID" in star_data.colnames:
+            gaia_id_col = "GAIAEDR3_SOURCE_ID"
+        elif "dr3_source_id" in star_data.colnames:
+            gaia_id_col = "dr3_source_id"
+        else:
+            raise ValueError("SQL=True, but no Gaia source ID column (`GAIAEDR3_SOURCE_ID` or `dr3_source_id`) found in dataset.")
+        
+        # Add the correct Gaia ID column
+        required_keys.append(gaia_id_col) 
+
 
     # Function to check missing keys
     missing_keys = [key for key in required_keys if key not in star_data.colnames]
@@ -542,18 +571,83 @@ def apogee_filter(star_data_in, save_path=None):
     # apocenter_filter = star_data['R_ap'] > 5
     # dist_err_filter = apogee_data['DIST_ERR'] < 1.5
 
-
     # ------------------ Apply stage 2 filters ------------------
     star_data = star_data[ecc_filter & energy_filter] # & apocenter_filter & dist_err_filter
 
+    # ------------------ SQL-Based Gaia Distance Query ------------------
+    if SQL:
+        logging.info("Querying Gaia for distances...")
+
+        # Extract Gaia IDs
+        gaia_ids = np.array(star_data[gaia_id_col])
+        # Set size for SQL query and split up GAIA IDs
+        query_size = 750
+        indiv_queries = np.array_split(gaia_ids, np.ceil(len(gaia_ids) / query_size))
+
+        # Empty list to store the results of each query
+        # Track missing GAIA IDs
+        list_query_results = []
+        missing_ids_set = set()
+
+        # Query Gaia in chunks
+        for i, query in enumerate(tqdm(indiv_queries, desc="Processing Queries")):
+            gaia_id_list = ", ".join(query.astype(str))
+            
+            # Define SQL query
+            distance_query = f"""
+            SELECT source_id, r_med_photogeo, r_lo_photogeo, r_hi_photogeo
+            FROM external.gaiaedr3_distance
+            WHERE source_id IN ({gaia_id_list});
+            """
+
+            # Run query
+            job = Gaia.launch_job(distance_query)
+            results = job.get_results()
+
+            # Store missing IDs
+            query_ids = set(query)
+            returned_ids = set(results['source_id'])
+            missing_ids_set.update(query_ids - returned_ids)
+
+            # Append results
+            list_query_results.append(results)
+
+        # Combine results
+        all_query_results = vstack(list_query_results)
+        missing_gaia_ids = np.array(list(missing_ids_set))
+
+        # Remove stars with missing GAIA Data
+        missing_ids_position = np.isin(gaia_ids, missing_gaia_ids)
+        star_data = Table(star_data[~missing_ids_position])
+
+
+        # Sort tables by GAIA ID's
+        all_query_results.sort('source_id')
+        star_data.sort(gaia_id_col)
+
+        # Check if the GAIA ID's match before merging
+        if not np.array_equal(star_data[gaia_id_col], all_query_results['source_id']):
+            raise ValueError("Mismatch in GAIA IDs - Ensure the IDs match before merging.")
+
+        # Ensure all_query_results is an Astropy Table
+        all_query_results = Table(all_query_results)
+        
+        # Merge Gaia distances into the main dataset
+        star_data['r_med_photogeo'] = all_query_results['r_med_photogeo']
+        star_data['r_lo_photogeo'] = all_query_results['r_lo_photogeo']
+        star_data['r_hi_photogeo'] = all_query_results['r_hi_photogeo']
+
+        # ------------------ Save distance errors if data from sql provided ------------------
+        dist_err_filter_hi = (star_data['r_hi_photogeo'] - star_data['r_med_photogeo']) < 1500
+        dist_err_filter_lo = (star_data['r_med_photogeo'] - star_data['r_lo_photogeo']) < 1500
+        star_data = star_data[dist_err_filter_hi & dist_err_filter_lo]
+
+    # ------------------ Save filtered data if path provided ------------------
     # Store final number of stars
     final_star_count = len(star_data)
     logging.info(f"Final number of stars: {final_star_count}")
     logging.info(f"Fraction retained: {final_star_count / initial_star_count:.2%}")
 
-        # ------------------ Save filtered data if path provided ------------------
-
-    # Save data if a path is provided
     if save_path:
         star_data.write(save_path, format="fits", overwrite=True)
         logging.info(f"Filtered dataset saved to {save_path}")
