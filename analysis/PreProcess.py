@@ -76,7 +76,7 @@ def convert_to_astropy_table(data):
         raise TypeError("Unsupported data type. Must be an Astropy Table, NumPy recarray, Pandas DataFrame, or a valid file path.")
 
 
-def gallah_filter(star_data_in, dynamics_data_in, gaia_data_in, save_path=None):
+def galah_filter(star_data_in, dynamics_data_in, gaia_data_in, save_path=None):
     """
     Applies quality cuts to GALAH, Gaia, and dynamics datasets to produce 
     a refined sample of metal-poor, high-eccentricity stars. 
@@ -368,8 +368,10 @@ def gallah_filter(star_data_in, dynamics_data_in, gaia_data_in, save_path=None):
 
     # Save data if a path is provided
     if save_path:
-        star_data.write(save_path, format="fits", overwrite=True)
-        logging.info(f"Filtered dataset saved to {save_path}")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UnitsWarning)
+            star_data.write(save_path, format="fits", overwrite=True)
+    logging.info(f"Filtered dataset saved to {save_path}")
 
     return star_data   
 

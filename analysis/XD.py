@@ -24,7 +24,7 @@ class XDPipeline:
 
     The pipeline follows these key steps:
     
-    1. **Initialization** (`__init__`):
+    1. **Initialisation** (`__init__`):
        - Takes in stellar data as an Astropy Table, NumPy recarray, or Pandas DataFrame.
        - Extracts relevant features defined by `data_keys` and their errors `data_err_keys`.
 
@@ -133,11 +133,11 @@ class XDPipeline:
         self.data_err_keys = data_err_keys
 
         # Extract the data and their errors from the data using the keys provided and stack them into a 2D array, (number_of_parameters, number_of_samples)
-        self.feature_data = np.vstack([self.star_data[key] for key in self.data_keys]).T
+        self.feature_data = np.vstack([np.asarray(self.star_data[key]) for key in self.data_keys]).T
 
         # Extract the errors from the astropy table using the keys provided
         # We have no informatiom on the correlation between the errors so assume they are diagonal/uncorrelated. 
-        self.errors_data = np.vstack([self.star_data[err_key] for err_key in self.data_err_keys]).T
+        self.errors_data = np.vstack([np.asarray(self.star_data[err_key]) for err_key in self.data_err_keys]).T
 
         # Extract the number of stars/ samples and features from the data array
         self.n_samples, self.n_features = self.feature_data.shape
