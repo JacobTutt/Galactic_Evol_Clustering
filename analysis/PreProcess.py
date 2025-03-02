@@ -1,17 +1,15 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 import os
+import logging
+import warnings
 
-from astropy.io import fits
 from astropy.table import Table
-from astropy.table import vstack
-from astroquery.gaia import Gaia
+from astropy import units as u
+from astropy.units import UnitsWarning
 
 from scipy.stats import norm
 
-import logging
 logging.basicConfig(level=logging.INFO)
 
 def convert_to_astropy_table(data):
@@ -58,7 +56,10 @@ def convert_to_astropy_table(data):
             if file_ext == ".csv":
                 return Table.read(data, format="csv")
             elif file_ext in [".fits", ".fit"]:
-                return Table.read(data, format="fits")
+                # Suppress unit warnings only when reading FITS
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=UnitsWarning)
+                    return Table.read(data, format="fits")
             elif file_ext in [".txt", ".dat"]:
                 return Table.read(data, format="ascii")
             else:
@@ -407,7 +408,7 @@ def apogee_filter(star_data_in, save_path=None):
        - `[Mg/Mn]`: If missing, computed as `mg_fe - mn_fe`. Require:
          - `mg_mn_flag == 0` (or `mg_fe_flag == 0` & `mn_fe_flag == 0` if `mg_mn_flag` is missing).
          - `mg_mn_err < 0.1` for reliable measurement.
-       - `[α/Fe]`: Constructed if missing from individual elements. Require:
+       - `[alpha/Fe]`: Constructed if missing from individual elements. Require:
          - `alpha_fe_flag == 0` and `alpha_fe_err < 0.1`.
 
     **4. Orbital and Kinematic Cuts**
@@ -447,7 +448,7 @@ def apogee_filter(star_data_in, save_path=None):
     required_keys = [
         "extratarg", "logg", "fe_h", "fe_h_err", "fe_h_flag", "al_fe", "al_fe_err", "al_fe_flag",
         "ce_fe", "ce_fe_err", "ce_fe_flag", "mg_fe", "mg_fe_err", "mg_fe_flag",
-        "mn_fe", "mn_fe_err", "mn_fe_flag", "alpha_fe_err", "alpha_fe_flag", "ecc_50", "E_50"
+        "mn_fe", "mn_fe_err", "mn_fe_flag", "alpha_fe_err", "ecc_50", "E_50"
     ]
 
     # Function to check missing keys
