@@ -2,3 +2,9 @@
 \diss_venvs
 .DS_Store
 \extreme-deconvolution
+
+
+# Ignore Python cache files
+*/__pycache__
+*.pyc
+*.pyo
