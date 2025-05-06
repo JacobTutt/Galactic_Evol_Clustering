@@ -16,6 +16,8 @@ import seaborn as sns
 from matplotlib.patches import Ellipse
 from matplotlib.ticker import FuncFormatter
 import matplotlib.colors as mcolors
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
+
 
 from typing import List, Tuple, Optional, Union
 
@@ -95,7 +97,7 @@ class XDPipeline:
     - Measurement uncertainties are incorporated into the covariance matrices during model fitting.
     - The pipeline supports saving/loading XD results for reproducibility.
     """
-    def __init__(self, star_data: Union[Table, np.recarray, pd.DataFrame], data_keys: List[str], data_err_keys: List[str]):
+    def __init__(self, star_data: Union[Table, np.recarray, pd.DataFrame], data_keys: List[str], data_err_keys: List[str], scaling: bool = True):
         """
         Initialise the XDPipeline with stellar data and keys of intrest for the Gaussian Mixture Model (GMM) - Extreme Deconvolution (XD) process, defining the parameter space of interest. 
 
@@ -129,11 +131,25 @@ class XDPipeline:
         missing_keys = [key for key in data_keys + data_err_keys if key not in colnames]
         if missing_keys:
             raise ValueError(f"Keys {missing_keys} not found in data table")
+        
 
         # Store the data, data keys, and data error keys
         self.star_data = star_data
         self.data_keys = data_keys
         self.data_err_keys = data_err_keys
+
+        # Choose whether to scale the data or not - if not scaling the data then the energy values are divided by 1e5 
+        self.scaling = scaling
+        if not self.scaling:
+            for key in self.data_keys:
+                if key == 'E_50':
+                    self.star_data['E_50'] /= 1e5
+                    if 'E_err' in self.star_data.colnames:
+                        self.star_data['E_err'] /= 1e5
+                elif key == 'Energy':
+                    self.star_data['Energy'] /= 1e5
+                    if 'e_Energy' in self.star_data.colnames:
+                        self.star_data['e_Energy'] /= 1e5
 
         # Extract the data and their errors from the data using the keys provided and stack them into a 2D array, (number_of_parameters, number_of_samples)
         self.feature_data = np.vstack([np.asarray(self.star_data[key]) for key in self.data_keys]).T
@@ -165,8 +181,6 @@ class XDPipeline:
         self.filtered_best_params = None
         # Stores which of the above was used for the assignment
         self.assignment_metric = None
-
-
 
 
     def _BICScore(self, log_likelihood: float, num_params: int, num_data_points: int) -> float:
@@ -207,28 +221,39 @@ class XDPipeline:
     
     def run_XD(self, gauss_component_range: Tuple[int, int] = (1, 10), max_iterations: int = int(1e9), n_repeats: int = 3, n_init: int = 100, save_path: Optional[str] = None) -> None:
         """
-        Run Extreme Deconvolution (XD) for a range of Gaussian components with multiple random initializations.
-        The results are evaluated using BIC and AIC for model selection.
+        Initialise the XDPipeline with stellar data and define the parameter space for 
+        Extreme Deconvolution (XD) using a specified set of features and their uncertainties.
+
+        This constructor supports optional scaling of features using standardisation. If 
+        `scaling=False`, the features are used in their original units; however, energy-related 
+        parameters ('E_50' or 'Energy') are manually scaled by 1e5 for consistency.
 
         Parameters
         ----------
-        gauss_component_range : Tuple[int, int]
-            Range of Gaussian components to test, specified as (min, max).
-        max_iterations : int
-            Maximum number of EM iterations per XD run.
-        n_repeats : int
-            Number of complete repetitions of the initialization process.
-        n_init : int
-            Number of random initializations per component count.
-        save_path : Optional[str]
-            Path to save XD results. If None, results are not saved.
+        star_data : Table, np.recarray, or pd.DataFrame
+            Input dataset containing stellar properties. Accepted formats are Astropy Table,
+            NumPy recarray, or Pandas DataFrame.
+
+        data_keys : List[str]
+            Column names representing the features to be used in the GMM-XD analysis.
+
+        data_err_keys : List[str]
+            Column names representing the corresponding measurement uncertainties for each
+            feature in `data_keys`.
+
+        scaling : bool, optional
+            Whether to apply standard scaling (zero mean, unit variance) to the input features.
+            If False, no scaling is applied globally, but energy-related columns ('E_50' or 'Energy')
+            are manually divided by 1e5. Default is True.
 
         Raises
         ------
-        ValueError
-            If `gauss_component_range` is invalid.
         TypeError
-            If `n_repeats`, `n_init`, or `max_iterations` are not positive integers.
+            If the input dataset is not a supported type.
+
+        ValueError
+            If `data_keys` and `data_err_keys` differ in length or contain missing columns 
+            not present in the input dataset.
         """
 
         # Check that the component range is valid
@@ -253,13 +278,16 @@ class XDPipeline:
         self.n_init = n_init
         self.save_path_XD = save_path
 
-
-        # Scale the data to have zero mean and unit variance - this will improve the convergence of the EM algorithm
+        # OPTIONAL - Scale the data to have zero mean and unit variance - this will improve the convergence of the EM algorithm
         # Errors are scaled by the same factor to maintain the same relative uncertainty
         # Note this will require the gaussians means and covariances returned by XD to be scaled back to the original units for interpretation before saving
-        scaler = StandardScaler()
-        data_scaled = scaler.fit_transform(self.feature_data)
-        errors_scaled = self.errors_data / scaler.scale_
+        if self.scaling:
+            scaler = StandardScaler()
+            data_scaled = scaler.fit_transform(self.feature_data)
+            errors_scaled = self.errors_data / scaler.scale_
+        else:
+            data_scaled = self.feature_data
+            errors_scaled = self.errors_data
 
         # Calculate the extreme values of the data for initialisation randomisation
         # extreme_data_values = (np.max(self.feature_data, axis=0), np.min(self.feature_data, axis=0))
@@ -324,12 +352,17 @@ class XDPipeline:
                         # Copy the updated weights, means and covariances
                         post_XD_weights, post_XD_means, post_XD_cov = init_weights.copy(), init_mean.copy(), init_covar.copy()
 
+                        # If the scaling is on then the means and covariances are scaled and need to br reverting
                         # Unscale the means and covariances to return them to their original/meaningful units
-                        post_scaling_means = scaler.inverse_transform(post_XD_means)
-                        post_scaling_cov = np.array([
-                            np.dot(np.dot(np.diag(scaler.scale_), cov), np.diag(scaler.scale_))
-                            for cov in post_XD_cov
-                        ])
+                        if self.scaling:
+                            post_scaling_means = scaler.inverse_transform(post_XD_means)
+                            post_scaling_cov = np.array([
+                                np.dot(np.dot(np.diag(scaler.scale_), cov), np.diag(scaler.scale_))
+                                for cov in post_XD_cov
+                            ])
+                        else:
+                            post_scaling_means = post_XD_means
+                            post_scaling_cov = post_XD_cov
 
                         # Store the results
                         self.results_XD["repeat no."].append(n)
@@ -369,7 +402,7 @@ class XDPipeline:
 
         return None
     
-    def compare_XD(self, opt_metric = 'BIC', n_gauss_filter: Optional[int] = None, repeat_no_filter: Optional[int] = None, save_path: Optional[str] = None) -> None:
+    def compare_XD(self, opt_metric = 'BIC', n_gauss_filter: Optional[int] = None, repeat_no_filter: Optional[int] = None, save_path: Optional[str] = None, zoom_in: Optional[List[int]] = None) -> None:
         """
         Analyse Extreme Deconvolution (XD) results using BIC or AIC.
         This method identifies the best-fit model, summarizes failed runs, and visualizes score distributions.
@@ -565,124 +598,42 @@ class XDPipeline:
         # Plot combined BIC & AIC
         fig, ax = plt.subplots(figsize=(6, 8))
         # BIC - Blue
-        ax.plot(n_gauss_list, BIC_min, 'b-', label="BIC - Lowest (Solid)")
-        ax.plot(n_gauss_list, BIC_max, 'b--', label="BIC - Highest (Dashed)")
-        ax.plot(n_gauss_list, BIC_median, 'b:', label="BIC - Median (Dotted)")
+        ax.plot(n_gauss_list, BIC_min, 'b-', label="BIC")
+        ax.plot(n_gauss_list, BIC_max, 'b--') #, label="BIC - Highest")
+        ax.plot(n_gauss_list, BIC_median, 'b:') #, label="BIC - Median")
 
         # AIC - Red
-        ax.plot(n_gauss_list, AIC_min, 'r-', label="AIC - Lowest (Solid)")
-        ax.plot(n_gauss_list, AIC_max, 'r--', label="AIC - Highest (Dashed)")
-        ax.plot(n_gauss_list, AIC_median, 'r:', label="AIC - Median (Dotted)")
+        ax.plot(n_gauss_list, AIC_min, 'r-', label="AIC")
+        ax.plot(n_gauss_list, AIC_max, 'r--') #, label="AIC - Highest")
+        ax.plot(n_gauss_list, AIC_median, 'r:') #, label="AIC - Median")
 
         ax.set_xlabel("Number of Gaussian Components", fontsize=12)
         ax.set_ylabel("Score", fontsize=12)
-        ax.legend(loc='best')
+        ax.legend(loc='upper left')
+
         ax.grid(True)
+
+
+        # Optional Zoom in Option for the top right
+        if zoom_in:
+            axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
+            # BIC - Blue
+            axins.plot(n_gauss_list, BIC_min, 'b-')
+            axins.plot(n_gauss_list, BIC_max, 'b--') 
+            axins.plot(n_gauss_list, BIC_median, 'b:')
+
+            # Set x-axis limits from zoom_in list
+            axins.set_xlim(min(zoom_in) - 0.5 , max(zoom_in) + 0.5)
+
+            # Set y-axis limits based on BIC values in zoomed range
+            mask = [(x in zoom_in) for x in n_gauss_list]
+            if any(mask):
+                zoom_bic = [b for b, m in zip(BIC_min, mask) if m]
+                axins.set_ylim(min(zoom_bic) * 0.99, max(zoom_bic) * 1.02)
+            mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+
         plt.tight_layout()
         plt.show()
-
-        return None
-    
-    def assigment_XD(self, assignment_metric = 'best'): 
-        """
-        Assign stars to Gaussian components based on the best-fit XD model.
-        Computes the responsibility of each gaussians for each star and assigns it accordingly.
-
-        Parameters
-        ----------
-        assignment_metric : str
-            Selection criteria for the best-fit model ('best' or 'best filtered').
-
-        Raises
-        ------
-        ValueError
-            If no XD results are available.
-        ValueError
-            If an invalid `assignment_metric` is specified.
-
-        Returns
-        -------
-        None
-            Updates `star_data` in place to include probability assignments:
-                - `prob_gauss_{i}`: Probability of belonging to the i-th Gaussian component.
-                - `max_gauss`: Index of the component with the highest probability (1-based index).
-        """
-
-        # Ensure that all previous analysis has been preformed. 
-
-        if self.results_XD is None:
-            raise ValueError("No XD results found in class. Please run XD and analysis first or provide valid path to load from in the analysis method.")
-        
-        if assignment_metric == 'best filtered' and self.filtered_best_params is None:
-            raise ValueError("No filtered best parameters found. Please run filtered analysis first.")
-        
-        elif assignment_metric == 'best' and self.best_params == {}:
-            raise ValueError("No best parameters found. Please run analysis first.")
-        
-        elif assignment_metric not in ['best', 'best filtered']:
-            raise ValueError("Invalid assignment metric selected. Please select either 'best' or 'best filtered'.")
-        
-        # Delete any existing probability assignments related entries to avoid conflicts
-        colnames = self.star_data.colnames
-
-        # Delete any existing probability assignments to avoid conflicts
-        for key in colnames:
-            if key.startswith('prob_gauss_') or key == 'max_gauss':
-                del self.star_data[key]
-
-        # Allow storage of which assignment metric was used for future reference
-        self.assignment_metric = assignment_metric
-        
-        # Extract the results of relevent analysis locally
-        if assignment_metric == 'best filtered':
-            assignment_params = self.filtered_best_params
-        if assignment_metric == 'best':
-            assignment_params = self.best_params
-
-        # Print a summary of what this is preforming
-        print(f"Assigning stars to Gaussian components based on the {assignment_metric} XD model.")
-        print(f"This has been optimised for the {assignment_params['metric']} score and returned the results:")
-        print(f" Best {assignment_params['metric']} Score: {assignment_params['score']:.4f} occurred at:")
-        print(f"   - Gaussian Components (n_gauss): {assignment_params['gauss_components']}")
-        print(f"   - Repeat cycle (n): {assignment_params['repeat']}")
-        print(f"   - Initialisation (i): {assignment_params['init']}")
-
-        # Error-Aware Explanation:
-        # Cannot evaluate the probability density at position in parameter space deirectly
-        # XD accounts for measurement errors by modifying the covariance matrices of the Gaussian components. T
-        # Allows total uncertainty reflects both the model and the measurement noise.
-        # Done by adding the measurement error covariance X to the intrinsic Gaussian variance V, so:
-        #     T  = V + Xerr
-        
-        # Initialises columns for probabilities and assignments
-        for i in range(assignment_params['gauss_components']):
-            self.star_data[f'prob_gauss_{i+1}'] = np.zeros(len(self.star_data))
-            self.star_data['max_gauss'] = np.zeros(len(self.star_data), dtype=int)
-
-        # For each star calculate the probability of it belonging to each gaussian
-        for star_index, star in enumerate(self.feature_data):
-            probabilities = []
-            # Extract the measurement error covariance for the current star and convert it to a diagonal matrix
-            star_errors = np.diag(self.errors_data[star_index])
-            # Cycle through each of the gaussinas from the n_gauss
-            for j in range(assignment_params['gauss_components']):
-                # Mean covariance and weight for the jth gaussian
-                mean_j = assignment_params['XD_means'][j]
-                # Error-Aware Covariance Adjustment
-                cov_j = assignment_params['XD_covariances'][j] + star_errors
-                weight_j = assignment_params['XD_weights'][j]
-
-                # Calculate the probability of the data point given the gaussian
-                try:
-                    prob = weight_j * multivariate_normal.pdf(star, mean=mean_j, cov=cov_j)
-                # Handle singular covariance matrices
-                except np.linalg.LinAlgError:
-                    prob = 0 
-
-                probabilities.append(prob)
-                self.star_data[f'prob_gauss_{j+1}'][star_index] = prob
-            # Assign the star to the gaussian with the highest probability
-            self.star_data['max_gauss'][star_index] = np.argmax(probabilities) + 1
 
         return None
     
@@ -760,24 +711,27 @@ class XDPipeline:
         # Done by adding the measurement error covariance X to the intrinsic Gaussian variance V, so:
         #     T  = V + Xerr
 
-        # StandardScaler is used to reproduce scaling applied during XD fitting
-        # Otherwise very ill-conditioned covariance matrices occur ie dominance from the energy term
-        scaler = StandardScaler()
-        scaler.fit(self.feature_data)
+        if self.scaling:
+            # StandardScaler is used to reproduce scaling applied during XD fitting
+            # Otherwise very ill-conditioned covariance matrices occur ie dominance from the energy term
+            scaler = StandardScaler()
+            scaler.fit(self.feature_data)
 
-        # Extract scale for use in covariance re-projection
-        scaling = scaler.scale_
-        D_inv = np.diag(1.0 / scaling)
+            scaling_factors = scaler.scale_
+            D_inv = np.diag(1.0 / scaling_factors)
 
-        # Rescale means and covariances from original units back into scaled space
-        means_unscaled = assignment_params['XD_means']
-        covs_unscaled = assignment_params['XD_covariances']
-        means_scaled = scaler.transform(means_unscaled)
-        covs_scaled = np.array([D_inv @ cov @ D_inv for cov in covs_unscaled])
+            # Rescale means and covariances to scaled space
+            means_scaled = scaler.transform(assignment_params['XD_means'])
+            covs_scaled = np.array([D_inv @ cov @ D_inv for cov in assignment_params['XD_covariances']])
 
-        # Scale the input feature data and errors using the same scaler
-        feature_data_scaled = scaler.transform(self.feature_data)
-        errors_data_scaled = self.errors_data / scaling
+            feature_data_scaled = scaler.transform(self.feature_data)
+            errors_data_scaled = self.errors_data / scaling_factors
+        else:
+            # No scaling applied: use original data and model parameters directly
+            means_scaled = assignment_params['XD_means']
+            covs_scaled = assignment_params['XD_covariances']
+            feature_data_scaled = self.feature_data
+            errors_data_scaled = self.errors_data
 
         # Initialises columns for probabilities and assignments
         for i in range(assignment_params['gauss_components']):
@@ -819,87 +773,6 @@ class XDPipeline:
 
         return None
     
-    # def table_results_XD(self, component_name_dict: dict = None) -> pd.DataFrame:
-    #     """
-    #     Generate a summary table of the Extreme Deconvolution (XD) results showing the mean and error values of each gaussian in high dimensional space.
-
-    #     For each gaussian the table includes:
-    #     - Component Name (indexed numerically or custom if a mapping is provided)
-    #     - XD assigned Weight (%)
-    #     - Count of assigned stars
-    #     - Count as a percentage of the total assigned stars
-    #     - Mean values and standard deviations for each feature parameter
-
-    #     Parameters
-    #     ----------
-    #     component_name_dict : dict, optional
-    #         A dictionary mapping component indices (0-based) to custom names.
-    #         The table will be ordered according to the order of keys in this dictionary if provided.
-
-    #     Returns
-    #     -------
-    #     pd.DataFrame
-    #         A formatted summary of the Gaussian components fitted by XD.
-    #     """
-
-    #     # Ensure that the analysis has been run before generating the table
-    #     if self.assignment_metric is None:
-    #         raise ValueError("No assignment metric found. Please run assignment method first, which requires XD and analysis/comparison to be run first.")
-        
-    #     # Extract the relevant parameters depending on the assignment metric used during assignment_XD
-    #     if self.assignment_metric == 'best':
-    #         assignment_params = self.best_params 
-    #     elif self.assignment_metric == 'best filtered':
-    #         assignment_params = self.filtered_best_params
-
-    #     # Extract Gaussian mixture parameters
-    #     means = assignment_params['XD_means']
-    #     covariances = assignment_params['XD_covariances']
-    #     weights = assignment_params['XD_weights']
-    #     n_components = assignment_params['gauss_components']
-        
-    #     # Count how many stars are assigned to each Gaussian component
-    #     component_counts = np.array([(self.star_data['max_gauss'] == i+1).sum() for i in range(n_components)])
-    #     count_percent = np.round((component_counts / component_counts.sum()) * 100, 1)
-
-    #     # Construct base data dictionary
-    #     table_data = {
-    #         "Component": [f"Component {i+1}" for i in range(n_components)],
-    #         "Weight (%)": np.round(weights * 100, 1),
-    #         "Count": component_counts,
-    #         "Count (%)": count_percent
-    #     }
-
-    #     # Add feature parameter summaries
-    #     for i, key in enumerate(self.data_keys):
-    #         mean_values = means[:, i]
-    #         std_values = np.sqrt(covariances[:, i, i])
-    #         table_data[key] = [f"{mean:.2f} ± {std:.2f}" for mean, std in zip(mean_values, std_values)]
-
-    #     # Convert to DataFrame
-    #     results_df = pd.DataFrame(table_data)
-
-    #     # Override component names and order if a mapping is provided
-    #     if component_name_dict:
-    #         # Create new Component column using the provided names
-    #         name_mapping = {f"Component {i+1}": name for i, name in component_name_dict.items()}
-    #         results_df["Component"] = results_df["Component"].map(name_mapping)
-
-    #         # Reorder the DataFrame according to the input dict
-    #         custom_order = [name_mapping[f"Component {i+1}"] for i in component_name_dict]
-    #         results_df["Component"] = pd.Categorical(results_df["Component"], categories=custom_order, ordered=True)
-    #         results_df = results_df.sort_values("Component").reset_index(drop=True)
-
-    #     else:
-    #         # Default sorting by weight
-    #         results_df = results_df.sort_values(by="Weight (%)", ascending=False).reset_index(drop=True)
-
-    #     # Print formatted table
-    #     print("\nSummary of GMM Fit Result for GALAH-Gaia Sample")
-    #     print(tabulate(results_df, headers="keys", tablefmt="grid"))
-
-    #     return results_df
-    
     def table_results_XD(self, component_name_dict: dict = None, combine: list = None, labels_combined: list = None) -> pd.DataFrame:
         """
         Generate a summary table of the Extreme Deconvolution (XD) results showing the mean and error values of each Gaussian in high-dimensional space.
@@ -927,7 +800,6 @@ class XDPipeline:
             A formatted summary of the Gaussian components fitted by XD.
         """
 
-        from tabulate import tabulate
 
         # Ensure that the analysis has been run before generating the table
         if self.assignment_metric is None:
@@ -976,6 +848,14 @@ class XDPipeline:
             results_df = results_df.sort_values("Component").reset_index(drop=True)
         else:
             results_df = results_df.sort_values(by="Weight (%)", ascending=False).reset_index(drop=True)
+
+        # Rename Energy
+        if self.scaling:
+            energy_rename_map = {'Energy': 'Scaled Energy ($\\times 10^5$)', 'E_50': 'Scaled Energy ($\\times 10^5$)'}
+            results_df.rename(columns={k: v for k, v in energy_rename_map.items() if k in results_df.columns}, inplace=True)
+        else:
+            energy_rename_map = {'Energy': 'Energy ($\\times 10^5$)', 'E_50': 'Energy ($\\times 10^5$)'}
+            results_df.rename(columns={k: v for k, v in energy_rename_map.items() if k in results_df.columns}, inplace=True)
 
         # Print formatted table
         print("\nSummary of GMM Fit Result for GALAH-Gaia Sample")
@@ -1037,6 +917,15 @@ class XDPipeline:
 
             # Convert all rows to a DataFrame for display
             combined_df = pd.DataFrame(combined_rows)
+
+            # Rename Energy
+            if self.scaling:
+                energy_rename_map = {'Energy': 'Scaled Energy ($\\times 10^5$)', 'E_50': 'Scaled Energy ($\\times 10^5$)'}
+                combined_df.rename(columns={k: v for k, v in energy_rename_map.items() if k in combined_df.columns}, inplace=True)
+            else:
+                energy_rename_map = {'Energy': 'Energy ($\\times 10^5$)', 'E_50': 'Energy ($\\times 10^5$)'}
+                combined_df.rename(columns={k: v for k, v in energy_rename_map.items() if k in combined_df.columns}, inplace=True)
+
             print(tabulate(combined_df, headers="keys", tablefmt="grid"))
 
     
@@ -1111,15 +1000,25 @@ class XDPipeline:
         y_data = self.feature_data[:, y_index]
         assignments = self.star_data['max_gauss']
 
-        # Set axis labels (custom formatting)
-        axis_label_dict = {
-            'fe_h': r'[Fe/H]', 'E_50': r'Energy', 'Energy': r'Energy',
-            'alpha_m': r'[$\alpha$/Fe]', 'alpha_fe': r'[$\alpha$/Fe]', 'ce_fe': r'[Ce/Fe]',
-            'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
-            'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
-            'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
-            'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]'
-        }
+        # Set axis labels (custom formatting) - Use scaled or unscaled labels based on the scaling flag
+        if self.scaling:
+            axis_label_dict = {
+                'fe_h': r'[Fe/H]', 'E_50': r'Energy', 'Energy': r'Energy',
+                'alpha_m': r'[$\alpha$/Fe]', 'alpha_fe': r'[$\alpha$/Fe]', 'ce_fe': r'[Ce/Fe]',
+                'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
+                'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
+                'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
+                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]'
+            }
+        else:
+            axis_label_dict = {
+                'fe_h': r'[Fe/H]', 'E_50': r'Energy ($\times 10^5$)', 'Energy': r'Energy ($\times 10^5$)',
+                'alpha_m': r'[$\alpha$/Fe]', 'alpha_fe': r'[$\alpha$/Fe]', 'ce_fe': r'[Ce/Fe]',
+                'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
+                'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
+                'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
+                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]'
+            }
 
         xlabel = axis_label_dict.get(x_key, x_key)
         ylabel = axis_label_dict.get(y_key, y_key)
@@ -1193,9 +1092,10 @@ class XDPipeline:
             ax_main.add_patch(ellipse)
 
         # Special formatting for energy
-        if y_key == 'E_50' or y_key == 'Energy':
-            ax_main.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e-5:.1f}"))
-            ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=13)
+        if self.scaling:
+            if y_key == 'E_50' or y_key == 'Energy':
+                ax_main.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e-5:.1f}"))
+                ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=13)
 
         # Histograms
         bins_x = np.linspace(np.min(x_data), np.max(x_data), 40)
@@ -1351,16 +1251,25 @@ class XDPipeline:
             cov = np.cov(cluster_points, rowvar=False)
             ellipse_params.append((mean, cov))
 
-        # Set axis labels (custom formatting)
-        axis_label_dict = {
-            'fe_h': r'[Fe/H]', 'E_50': r'Energy', 'Energy': r'Energy',
-            'alpha_m': r'[$\alpha$/Fe]', 'alpha_fe': r'[$\alpha$/Fe]', 'ce_fe': r'[Ce/Fe]',
-            'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
-            'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
-            'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
-            'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]', 'Ni_fe': r'[Ni/Fe]', 'ni_fe': r'[Ni/Fe]', 
-            'Eu_Mg': r'[Eu/Mg]', 'eu_mg': r'[eu/mg]'
-        }
+        # Set axis labels (custom formatting) - Use scaled or unscaled labels based on the scaling flag
+        if self.scaling:
+            axis_label_dict = {
+                'fe_h': r'[Fe/H]', 'E_50': r'Energy', 'Energy': r'Energy',
+                'alpha_m': r'[$\alpha$/Fe]', 'alpha_fe': r'[$\alpha$/Fe]', 'ce_fe': r'[Ce/Fe]',
+                'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
+                'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
+                'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
+                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]'
+            }
+        else:
+            axis_label_dict = {
+                'fe_h': r'[Fe/H]', 'E_50': r'Energy ($\times 10^5$)', 'Energy': r'Energy ($\times 10^5$)',
+                'alpha_m': r'[$\alpha$/Fe]', 'alpha_fe': r'[$\alpha$/Fe]', 'ce_fe': r'[Ce/Fe]',
+                'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
+                'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
+                'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
+                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]'
+            }
 
         xlabel = axis_label_dict.get(x_key, x_key)
         ylabel = axis_label_dict.get(y_key, y_key)
@@ -1433,9 +1342,10 @@ class XDPipeline:
             ax_main.add_patch(ellipse)
 
         # Special formatting for energy
-        if y_key == 'E_50' or y_key == 'Energy':
-            ax_main.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e-5:.1f}"))
-            ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=13)
+        if self.scaling:
+            if y_key == 'E_50' or y_key == 'Energy':
+                ax_main.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e-5:.1f}"))
+                ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=13)
 
         # Histograms
         bins_x = np.linspace(np.min(x_data), np.max(x_data), 40)
