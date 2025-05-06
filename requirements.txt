@@ -1,0 +1,13 @@
+numpy
+pandas
+tabulate
+tqdm
+matplotlib
+seaborn
+scikit-learn
+scipy
+astropy
+astroquery
+jupyter
+notebook
+ipykernel
