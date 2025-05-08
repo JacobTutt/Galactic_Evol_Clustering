@@ -402,7 +402,7 @@ class XDPipeline:
 
         return None
     
-    def compare_XD(self, opt_metric = 'BIC', n_gauss_filter: Optional[int] = None, repeat_no_filter: Optional[int] = None, save_path: Optional[str] = None, zoom_in: Optional[List[int]] = None) -> None:
+    def compare_XD(self, opt_metric = 'BIC', n_gauss_filter: Optional[int] = None, repeat_no_filter: Optional[int] = None, save_path: Optional[str] = None, zoom_in: Optional[List[int]] = None, display_full: bool = True) -> None:
         """
         Analyse Extreme Deconvolution (XD) results using BIC or AIC.
         This method identifies the best-fit model, summarizes failed runs, and visualizes score distributions.
@@ -490,10 +490,11 @@ class XDPipeline:
         self.best_params['XD_covariances'] = self.results_XD["covariances"][best_index]
 
         # Prints summary of best performing Gaussian components
-        print(f" Best Overall {opt_metric} Score: {self.best_params['score']:.4f} occurred at:")
-        print(f"   - Gaussian Components (n_gauss): {self.best_params['gauss_components']}")
-        print(f"   - Repeat cycle (n): {self.best_params['repeat']}")
-        print(f"   - Initialisation (i): {self.best_params['init']}")
+        if display_full:
+            print(f" Best Overall {opt_metric} Score: {self.best_params['score']:.4f} occurred at:")
+            print(f"   - Gaussian Components (n_gauss): {self.best_params['gauss_components']}")
+            print(f"   - Repeat cycle (n): {self.best_params['repeat']}")
+            print(f"   - Initialisation (i): {self.best_params['init']}")
 
         # This preforms it on the filtered data - ie a specific n_gauss and/ or repeat cycle
         if n_gauss_filter is not None or repeat_no_filter is not None:
@@ -554,9 +555,10 @@ class XDPipeline:
             "Total No. Runs": n_runs_gauss
         })
 
-        # Prints a formatted table of the number of failed XD runs
-        print("Table of Number of Gaussians vs Number of Failed XD Runs")
-        print(tabulate(n_failed_XD, headers='keys', tablefmt='psql'))
+        if display_full:
+            # Prints a formatted table of the number of failed XD runs
+            print("Table of Number of Gaussians vs Number of Failed XD Runs")
+            print(tabulate(n_failed_XD, headers='keys', tablefmt='psql'))
 
 
         # Reshapes BIC and AIC scores to 3D arrays: (n_gauss_components, n_repeats, n_init)
@@ -584,56 +586,58 @@ class XDPipeline:
         )
         AIC_means_stds_df.insert(0, "No. Gaussians", n_gauss_list)
 
-        # Print BIC and AIC summary tables
-        print("Table of BIC Means and Stds")
-        print(tabulate(BIC_means_stds_df, headers='keys', tablefmt='psql'))
+        if display_full:
+            # Print BIC and AIC summary tables
+            print("Table of BIC Means and Stds")
+            print(tabulate(BIC_means_stds_df, headers='keys', tablefmt='psql'))
 
-        print("Table of AIC Means and Stds")
-        print(tabulate(AIC_means_stds_df, headers='keys', tablefmt='psql'))
+            print("Table of AIC Means and Stds")
+            print(tabulate(AIC_means_stds_df, headers='keys', tablefmt='psql'))
 
         # Calculate min, max, and median BIC and AIC scores across repeats and initialisations for each Gaussian component count ie from n_init * n_repeats values - (n_gauss_components)
         BIC_min, BIC_max, BIC_median = BIC_scores.min(axis=(1, 2)), BIC_scores.max(axis=(1, 2)), np.nanmedian(BIC_scores, axis=(1, 2))
         AIC_min, AIC_max, AIC_median = AIC_scores.min(axis=(1, 2)), AIC_scores.max(axis=(1, 2)), np.nanmedian(AIC_scores, axis=(1, 2))
 
-        # Plot combined BIC & AIC
-        fig, ax = plt.subplots(figsize=(6, 8))
-        # BIC - Blue
-        ax.plot(n_gauss_list, BIC_min, 'b-', label="BIC")
-        ax.plot(n_gauss_list, BIC_max, 'b--') #, label="BIC - Highest")
-        ax.plot(n_gauss_list, BIC_median, 'b:') #, label="BIC - Median")
-
-        # AIC - Red
-        ax.plot(n_gauss_list, AIC_min, 'r-', label="AIC")
-        ax.plot(n_gauss_list, AIC_max, 'r--') #, label="AIC - Highest")
-        ax.plot(n_gauss_list, AIC_median, 'r:') #, label="AIC - Median")
-
-        ax.set_xlabel("Number of Gaussian Components", fontsize=12)
-        ax.set_ylabel("Score", fontsize=12)
-        ax.legend(loc='upper left')
-
-        ax.grid(True)
-
-
-        # Optional Zoom in Option for the top right
-        if zoom_in:
-            axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
+        if display_full:
+            # Plot combined BIC & AIC
+            fig, ax = plt.subplots(figsize=(6, 8))
             # BIC - Blue
-            axins.plot(n_gauss_list, BIC_min, 'b-')
-            axins.plot(n_gauss_list, BIC_max, 'b--') 
-            axins.plot(n_gauss_list, BIC_median, 'b:')
+            ax.plot(n_gauss_list, BIC_min, 'b-', label="BIC")
+            ax.plot(n_gauss_list, BIC_max, 'b--') #, label="BIC - Highest")
+            ax.plot(n_gauss_list, BIC_median, 'b:') #, label="BIC - Median")
 
-            # Set x-axis limits from zoom_in list
-            axins.set_xlim(min(zoom_in) - 0.5 , max(zoom_in) + 0.5)
+            # AIC - Red
+            ax.plot(n_gauss_list, AIC_min, 'r-', label="AIC")
+            ax.plot(n_gauss_list, AIC_max, 'r--') #, label="AIC - Highest")
+            ax.plot(n_gauss_list, AIC_median, 'r:') #, label="AIC - Median")
 
-            # Set y-axis limits based on BIC values in zoomed range
-            mask = [(x in zoom_in) for x in n_gauss_list]
-            if any(mask):
-                zoom_bic = [b for b, m in zip(BIC_min, mask) if m]
-                axins.set_ylim(min(zoom_bic) * 0.99, max(zoom_bic) * 1.02)
-            mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+            ax.set_xlabel("Number of Gaussian Components", fontsize=12)
+            ax.set_ylabel("Score", fontsize=12)
+            ax.legend(loc='upper left')
 
-        plt.tight_layout()
-        plt.show()
+            ax.grid(True)
+
+
+            # Optional Zoom in Option for the top right
+            if zoom_in:
+                axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
+                # BIC - Blue
+                axins.plot(n_gauss_list, BIC_min, 'b-')
+                axins.plot(n_gauss_list, BIC_max, 'b--') 
+                axins.plot(n_gauss_list, BIC_median, 'b:')
+
+                # Set x-axis limits from zoom_in list
+                axins.set_xlim(min(zoom_in) - 0.5 , max(zoom_in) + 0.5)
+
+                # Set y-axis limits based on BIC values in zoomed range
+                mask = [(x in zoom_in) for x in n_gauss_list]
+                if any(mask):
+                    zoom_bic = [b for b, m in zip(BIC_min, mask) if m]
+                    axins.set_ylim(min(zoom_bic) * 0.99, max(zoom_bic) * 1.02)
+                mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+
+            plt.tight_layout()
+            plt.show()
 
         return None
     
@@ -1259,7 +1263,7 @@ class XDPipeline:
                 'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
                 'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
                 'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
-                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]'
+                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]', 'Ni_fe': r'[Ni/Fe]', 'Eu_Mg': r'[Eu/Mg]', 'ni_fe': r'[Ni/Fe]'
             }
         else:
             axis_label_dict = {
@@ -1268,7 +1272,7 @@ class XDPipeline:
                 'al_fe': r'[Al/Fe]', 'Al_fe': r'[Al/Fe]', 'mg_mn': r'[Mg/Mn]',
                 'Y_fe': r'[Y/Fe]', 'Mg_Mn': r'[Mg/Mn]', 'Mn_fe': r'[Mn/Fe]',
                 'Ba_fe': r'[Ba/Fe]', 'Mg_Cu': r'[Mg/Cu]', 'Eu_fe': r'[Eu/Fe]',
-                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]'
+                'Ba_Eu': r'[Ba/Eu]', 'Na_fe': r'[Na/Fe]', 'Ni_fe': r'[Ni/Fe]', 'Eu_Mg': r'[Eu/Mg]', 'ni_fe': r'[Ni/Fe]'
             }
 
         xlabel = axis_label_dict.get(x_key, x_key)
