@@ -37,6 +37,7 @@ pip install -r requirements.txt
 
 This project utilizes the `extreme_deconvolution` algorithm for Gaussian Mixture Model (GMM) implementation. This provided by Bovy et al. (2011) but is not directly available via PyPI.
 
+
 To install the package, follow these steps, or see the source repositories `README`:
 
 **Source Repository:**
@@ -46,6 +47,8 @@ To install the package, follow these steps, or see the source repositories `READ
 **Installation Steps:**
 
 1.  **Clone the Repository**
+
+    - An installation of this is included within the repository already to make this process easier, however to ensure the most up to version you may wish to reclone.
 
     ```bash
     git clone [https://github.com/jobovy/extreme-deconvolution.git](https://github.com/jobovy/extreme-deconvolution.git)
