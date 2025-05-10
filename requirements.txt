@@ -1,13 +1,23 @@
+# Core Scientific Libraries
 numpy
 pandas
-tabulate
-tqdm
+scipy
+scikit-learn
 matplotlib
 seaborn
-scikit-learn
-scipy
+
+# Astropy and Astronomy Tools
 astropy
 astroquery
+
+# Notebook / Jupyter
 jupyter
 notebook
 ipykernel
+
+# Progress Bars and Formatting
+tqdm
+tabulate
+
+# Advanced Stats and Plotting
+umap-learn
