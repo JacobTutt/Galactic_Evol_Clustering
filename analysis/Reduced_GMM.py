@@ -26,7 +26,8 @@ class ReducedGMMPipeline:
     """
     A pipeline for clustering stellar data using Gaussian Mixture Models (GMM) applied to UMAP-reduced feature space.
 
-    Designed to identify and analyse structure in high-dimensional stellar datasets by first projecting them into a lower-dimensional manifold using UMAP, and then clustering in this reduced space. Subsequent interpretation is performed both in the low-dimensional space and in the original astrophysical parameter space.
+    Designed to identify and analyse structure in high-dimensional stellar datasets by first projecting them into a lower-dimensional manifold using UMAP, 
+    and then clustering in this reduced space. Subsequent interpretation is performed both in the low-dimensional space and in the original parameter space.
 
     The pipeline follows these key steps:
 
@@ -124,7 +125,8 @@ class ReducedGMMPipeline:
             If any of the keys in `data_keys` or 'max_gauss' are missing from the dataset.
         """
 
-        # Convert all inputs to an Astropy Table for consistency
+        # Convert all inputs types to an Astropy Table for consistency
+        # Handels multiple input types automatically
         if isinstance(star_data, np.recarray):
             star_data = Table(star_data)  # Convert recarray to Table
         elif isinstance(star_data, pd.DataFrame):
@@ -137,6 +139,7 @@ class ReducedGMMPipeline:
         
         # Check that the data keys and error keys are present in the data table
         # Print the missing keys if they are not present
+        # We also require the 'max_gauss' key to be present in the data table - this is the results of the GMM analysis and helps us have a benchmark of the UMAP analysis preformance
         missing_keys = [key for key in data_keys + ['max_gauss'] if key not in colnames]
         if missing_keys:
             raise ValueError(f"Keys {missing_keys} not found in data table")
@@ -166,16 +169,16 @@ class ReducedGMMPipeline:
             random_state=10
         )
         
-        # Store these umap dimensional space in the class 
+        # Store these umap dimensional space in the class so it can be used later
         self.umap_data = self.reducer.fit_transform(self.feature_data_scaled)
 
         # Extract the number of stars/ samples and features from the data array
         self.n_samples, self.n_features = self.feature_data.shape
 
-        # Extract the labells assigned in previous analysis - ie full dimensional space GMM - XD 
+        # Extract the labells assigned in previous analysis - ie Extreme deconvolution on full dimensional space
         self.XD_labels = self.star_data['max_gauss']
 
-        # Initialise the following attributes for future use in the XD pipeline
+        # Initialise the following attributes for future use in the GMM pipeline
         # The range of Gaussian components to run for
         self.gauss_component_range= None
         # The maximum number of EM iterations for each GMM opitimisation
@@ -196,6 +199,7 @@ class ReducedGMMPipeline:
         # Stores which of the above was used for the assignment
         self.assignment_metric = None
 
+
     def display_umap(self, label_dict: Optional[dict] = None, colour_dict: Optional[dict] = None) -> None:
         """
         Visualize the 2D UMAP projection of the data colored by cluster labels.
@@ -214,7 +218,8 @@ class ReducedGMMPipeline:
         # Get numeric labels from precomputed XD or GMM labels
         labels = np.array(self.XD_labels)
 
-        # If a label mapping is provided, apply it; otherwise use raw numeric labels
+        # If a mapping of labels is provided, apply it ie match cluster labels to names
+        # Otherwise use raw numeric labels
         if label_dict:
             named_labels = np.array([label_dict[int(l)] for l in labels])
         else:
@@ -223,16 +228,19 @@ class ReducedGMMPipeline:
         # Get unique label names
         unique_names = sorted(set(named_labels))
 
-        # Set default colors if none provided
+        # Set default colors if none are provided
         if colour_dict is None:
             default_colors = plt.cm.tab10.colors
             colour_dict = {name: default_colors[i % len(default_colors)] for i, name in enumerate(unique_names)}
 
-        # Produce the figure, cycle through the names and plot the data.
-        # The scatter plot is colored by the cluster labels
         plt.figure(figsize=(8, 6))
+
+        # Scatter plot of UMAP data colored by cluster labels
+        # Iterate over unique names and plot each cluster
         for name in unique_names:
+            # Create a mask for the current cluster
             mask = named_labels == name
+            # Plot the UMAP data for the current cluster - colours and labeled by inputs if provided
             plt.scatter(
                 self.umap_data[mask, 0],
                 self.umap_data[mask, 1],
@@ -329,6 +337,7 @@ class ReducedGMMPipeline:
                 bic = gmm.bic(self.umap_data)
                 aic = gmm.aic(self.umap_data)
 
+                # This storage method allows for dynamic appending of results
                 self.results_GMM["n_gauss"].append(n_gauss)
                 self.results_GMM["log_likelihood"].append(log_likelihood)
                 self.results_GMM["BIC"].append(bic)
@@ -377,6 +386,7 @@ class ReducedGMMPipeline:
             If `n_gauss_filter` is out of the range of fitted components.
         """
 
+        # Ensure that the GMM results are available either from previous runs or by loading from a file
         if self.results_GMM is None:
             if save_path is None:
                 raise ValueError("No GMM results found and no save_path provided.")
@@ -389,7 +399,7 @@ class ReducedGMMPipeline:
             # Determine the gaussian component range 
             self.gauss_component_range = (min(self.results_GMM["n_gauss"]), max(self.results_GMM["n_gauss"]))
         
-        # Ensure input filters are valid for the XD Results that the class contains
+        # Ensure input filters are valid for the GMM Results that are now accesible
         if n_gauss_filter is not None: 
             if n_gauss_filter < self.gauss_component_range[0] or n_gauss_filter > self.gauss_component_range[1]:
                 raise ValueError(f"Invalid Filter: {n_gauss_filter} not in the range of Gaussian components: {self.gauss_component_range}")
@@ -411,6 +421,7 @@ class ReducedGMMPipeline:
         n_gauss_all = self.results_GMM['n_gauss']
         best_idx = int(np.nanargmin(scores))
 
+        # Store the overall best parameters - regardless of filter
         self.best_params = {
             'metric': opt_metric,
             'score': scores[best_idx],
@@ -426,7 +437,7 @@ class ReducedGMMPipeline:
             print(f"  - Components: {self.best_params['gauss_components']}")
 
 
-        # This preforms it on the filtered data - ie a specific n_gauss
+        # This preforms it on the results with a specific gaussian components filter applied
         if n_gauss_filter is not None:
             self.assignment_metric = 'best filtered'
             idx = self.results_GMM['n_gauss'].index(n_gauss_filter)
@@ -441,7 +452,8 @@ class ReducedGMMPipeline:
                 'labels': self.results_GMM["labels"][idx]
             }
 
-            # Handle Assignment based on filtered data
+            # Handle Assignment 
+            # This is much more simple in this case as GMM preforms it automaticaly for you based on filtered data
             self.star_data['max_gauss_umap'] = self.filtered_best_params['labels']
             
             # Prints summary of best performing Gaussian components
@@ -548,21 +560,21 @@ class ReducedGMMPipeline:
         # Color setup
         colors = color_palette if color_palette else sns.color_palette("tab10", n_components)
 
-        # Layout
+        # Layout of the figure
         fig = plt.figure(figsize=(8, 8))
         ax_main = plt.axes([0.1, 0.1, 0.6, 0.6])
         ax_histx = plt.axes([0.1, 0.71, 0.6, 0.19])
         ax_histy = plt.axes([0.71, 0.1, 0.19, 0.6])
         ax_bar = plt.axes([0.71, 0.71, 0.19, 0.19])
 
-        # Main scatter
+        # Main scatter of UMAP data colored by GMM labels - using the defined color palette if provided
         ax_main.scatter(umap_data[:, 0], umap_data[:, 1], c=[colors[i] for i in labels], s=3, alpha=0.5)
         ax_main.set_xlabel("UMAP-1", fontsize=13)
         ax_main.set_ylabel("UMAP-2", fontsize=13)
         if xlim: ax_main.set_xlim(xlim)
         if ylim: ax_main.set_ylim(ylim)
 
-        # Draw ellipses on scattered data
+        # Draw ellipses on scattered data from the GMM components in 2D 
         for i in range(n_components):
             mean = means[i]
             cov = covs[i]
@@ -575,7 +587,7 @@ class ReducedGMMPipeline:
                             edgecolor=colors[i], facecolor='none', linewidth=1.5, alpha=0.8)
             ax_main.add_patch(ellipse)
 
-        # Marginal Histograms of data distribution
+        # Marginal Histograms of data distribution on the left and right axis
         bins_x = np.linspace(np.min(umap_data[:, 0]), np.max(umap_data[:, 0]), 40)
         bins_y = np.linspace(np.min(umap_data[:, 1]), np.max(umap_data[:, 1]), 40)
         bin_width_x = np.diff(bins_x)[0]
@@ -587,12 +599,20 @@ class ReducedGMMPipeline:
         if xlim: ax_histx.set_xlim(xlim)
         if ylim: ax_histy.set_ylim(ylim)
 
-        # Gaussian overlays on marginal histograms
-        x_range = np.linspace(np.min(umap_data[:, 0]), np.max(umap_data[:, 0]), 300)
-        y_range = np.linspace(np.min(umap_data[:, 1]), np.max(umap_data[:, 1]), 300)
+        # Gaussian overlays on marginal histograms to show each component's contribution to the 1D axis
+        x_min = min(np.min(umap_data[:, 0]), xlim[0]) if xlim else np.min(umap_data[:, 0])
+        x_max = max(np.max(umap_data[:, 0]), xlim[1]) if xlim else np.max(umap_data[:, 0])
+        y_min = min(np.min(umap_data[:, 1]), ylim[0]) if ylim else np.min(umap_data[:, 1])
+        y_max = max(np.max(umap_data[:, 1]), ylim[1]) if ylim else np.max(umap_data[:, 1])
+
+        x_range = np.linspace(x_min, x_max, 300)
+        y_range = np.linspace(y_min, y_max, 300)
+
         total_gauss_x = np.zeros_like(x_range)
         total_gauss_y = np.zeros_like(y_range)
 
+        # Calculate the Gaussian distributions for each component
+        # and plot them on the marginal histograms
         for i in range(n_components):
             mx, my = means[i][:2]
             sx = np.sqrt(covs[i][0, 0])
@@ -610,7 +630,7 @@ class ReducedGMMPipeline:
         ax_histx.plot(x_range, total_gauss_x, color='black', linewidth=2)
         ax_histy.plot(total_gauss_y, y_range, color='black', linewidth=2)
 
-        # Weights bar chart 
+        # Weights bar chart for each component in the left hand side
         sorted_idx = np.argsort(weights)[::-1]
         sorted_weights = weights[sorted_idx]
         sorted_colors = [colors[i] for i in sorted_idx]
@@ -669,12 +689,14 @@ class ReducedGMMPipeline:
         elif self.assignment_metric == 'best filtered':
             assignment_params = self.filtered_best_params
 
-        # Extract Gaussian mixture parameters
+        # Extract Gaussian mixture parameters - ie the weights
+        # Here we createa table of the GMM statisitcs in the high dimensional feature space so the actual GMM UMAP means and covariances are not used
         weights = assignment_params['weights']
         n_components = assignment_params['gauss_components']
         labels = assignment_params['labels']
         unique_components = np.unique(labels)
 
+        # Create a DataFrame to store the results
         table_data = {
         "Component": [],
         "Weight (%)": [],
@@ -684,7 +706,9 @@ class ReducedGMMPipeline:
 
         total_count = len(labels)
 
+        # Cycle through the components and calculate the mean and std for each of the features in the high dimensional space
         for comp in unique_components:
+            # Use the labels assigned in the low dimensional UMAP space to get the mean and std of the features in the high dimensional space
             mask = labels == comp
             count = np.sum(mask)
             count_pct = np.round(count / total_count * 100, 1)
@@ -695,6 +719,7 @@ class ReducedGMMPipeline:
             table_data["Count"].append(count)
             table_data["Count (%)"].append(count_pct)
 
+            # For all the features in the high dimensional space, calculate the mean and std and add them to the table
             for key in self.data_keys:
                 values = np.array(self.star_data[key])[mask]
                 mean = np.mean(values)
@@ -710,7 +735,6 @@ class ReducedGMMPipeline:
         if component_name_dict:
             # Convert component indices to names
             df["Component"] = df["Component"].apply(lambda x: component_name_dict.get(int(x.split()[-1]), x))
-
             # Enforce order as it appears in the input dict
             ordered_names = list(component_name_dict.values())
             df["Component"] = pd.Categorical(df["Component"], categories=ordered_names, ordered=True)
@@ -722,6 +746,7 @@ class ReducedGMMPipeline:
         print(tabulate(df, headers="keys", tablefmt="grid"))
 
         # Optional combined row summaries
+        #  this is useful for combining components that are similar ie GS/E1 and GS/E2
         if combine and labels_combined:
             if len(combine) != len(labels_combined):
                 raise ValueError("combine and labels_combined must have the same length.")
@@ -934,8 +959,13 @@ class ReducedGMMPipeline:
         ax_histy.tick_params(axis='x', which='major', labelsize=12)
 
         # Gaussian overlays
-        x_range = np.linspace(np.min(x_data), np.max(x_data), 300)
-        y_range = np.linspace(np.min(y_data), np.max(y_data), 300)
+        x_min = min(np.min(x_data), xlim[0]) if xlim else np.min(x_data)
+        x_max = max(np.max(x_data), xlim[1]) if xlim else np.max(x_data)
+        y_min = min(np.min(y_data), ylim[0]) if ylim else np.min(y_data)
+        y_max = max(np.max(y_data), ylim[1]) if ylim else np.max(y_data)
+
+        x_range = np.linspace(x_min, x_max, 300)
+        y_range = np.linspace(y_min, y_max, 300)
         total_gauss_x = np.zeros_like(x_range)
         total_gauss_y = np.zeros_like(y_range)
         

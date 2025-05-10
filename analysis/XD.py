@@ -1118,8 +1118,13 @@ class XDPipeline:
         ax_histy.tick_params(axis='x', which='major', labelsize=12)
 
         # Gaussian overlays
-        x_range = np.linspace(np.min(x_data), np.max(x_data), 300)
-        y_range = np.linspace(np.min(y_data), np.max(y_data), 300)
+        x_min = min(np.min(x_data), xlim[0]) if xlim else np.min(x_data)
+        x_max = max(np.max(x_data), xlim[1]) if xlim else np.max(x_data)
+        y_min = min(np.min(y_data), ylim[0]) if ylim else np.min(y_data)
+        y_max = max(np.max(y_data), ylim[1]) if ylim else np.max(y_data)
+
+        x_range = np.linspace(x_min, x_max, 300)
+        y_range = np.linspace(y_min, y_max, 300)
         total_gauss_x = np.zeros_like(x_range)
         total_gauss_y = np.zeros_like(y_range)
 
