@@ -30,10 +30,12 @@ class XDPipeline:
     The pipeline follows these key steps:
     
     1. **Initialisation** (`__init__`):
+
        - Takes in stellar data as an Astropy Table, NumPy recarray, or Pandas DataFrame.
        - Extracts relevant features defined by `data_keys` and their errors `data_err_keys`.
 
     2. **Extreme Deconvolution (XD)** (`run_XD`):
+
        - Normalises the dataset for efficient convergence. (Optional: scaling)
        - Runs XD over a specified range of Gaussian components.
        - Iterates through multiple random initialisations to ensure robust fitting.
@@ -41,21 +43,25 @@ class XDPipeline:
        - Optionally saves results to a file for later analysis.
 
     3. **Model Comparison & Selection** (`compare_XD`):
+
        - Compares different XD runs using Bayesian Information Criterion (BIC) or Akaike Information Criterion (AIC).
        - Identifies the best-fit model based on BIC or AIC scores.
        - Supports filtering results by a specific number of components or repeat cycle.
        - Generates a summary of failed runs and visualises scores across different components.
 
     4. **Star Assignment to Gaussian Components** (`assigment_XD`):
+
        - Computes each star's probability of belonging to each Gaussian component (responsibilities).
        - Assigns each star to the most probable Gaussian component.
        - Accounts for measurement uncertainties by modifying covariance matrices (error-aware).
 
     5. **Results Table** (`table_results_XD`):
+
        - Constructs a summary table showing the properties of each Gaussian component.
        - Displays and outputs estimated weights, assigned star counts, and mean ± standard deviation for each parameter.
 
     6. **Plotting Results** (`plot_XD`):
+
        - Generates a 2D scatter plot with color-coded Gaussian assignments.
        - Overlays Gaussian components as confidence ellipses (scaled by a z-score for different confidence levels).
        - Displays marginal histograms and Kernel Density Estimation (KDE) plots for feature distributions.
@@ -96,7 +102,7 @@ class XDPipeline:
 
     Notes
     -----
-    - The pipeline scales input data using `StandardScaler` before fitting, ensuring numerical stability.
+    - The pipeline optionally scales input data using `StandardScaler` before fitting, ensuring numerical stability.
     - Measurement uncertainties are incorporated into the covariance matrices during model fitting.
     - The pipeline supports saving/loading XD results for reproducibility.
     """
@@ -786,6 +792,7 @@ class XDPipeline:
         Generate a summary table of the Extreme Deconvolution (XD) results showing the mean and error values of each Gaussian in high-dimensional space.
 
         For each Gaussian the table includes:
+        
         - Component Name (indexed numerically or custom if a mapping is provided)
         - XD assigned Weight (%)
         - Count of assigned stars
@@ -1183,14 +1190,18 @@ class XDPipeline:
         Creates a 2D diagnostic plot of the clustering results from Extreme Deconvolution (XD) assignments, 
         without relying on the original XD model parameters (means/covariances).
 
+        Notes
+        -----
         This method:
-        - Displays individual stars colored by their assigned Gaussian component (from XD).
-        - Fits new 2D Gaussians (empirically) to each component in the projection space (x_key vs y_key).
-        - Overlays 2σ confidence ellipses from these fitted Gaussians.
-        - Adds marginal histograms and overlaid Gaussian projections for each axis.
-        - Plots a bar chart summarizing the relative weight of each component.
-        - Optionally includes a background density reference (e.g. full APOGEE–Gaia sample) via a 2D histogram.
 
+        * Displays individual stars colored by their assigned Gaussian component (from XD).
+        * Fits new 2D Gaussians (empirically) to each component in the projection space (x_key vs y_key).
+        * Overlays 2σ confidence ellipses from these fitted Gaussians.
+        * Adds marginal histograms and overlaid Gaussian projections for each axis.
+        * Plots a bar chart summarizing the relative weight of each component.
+        * Optionally includes a background density reference (e.g. full APOGEE–Gaia sample) via a 2D histogram.
+
+        
         Parameters
         ----------
         x_key : str
@@ -1215,11 +1226,6 @@ class XDPipeline:
             If the XD assignment has not been performed before plotting.
             If the provided x_key or y_key is not present in the dataset.
 
-        Notes
-        -----
-        - The fitted 2D Gaussians for each component are independent of the original XD means and covariances.
-        - Useful for visually validating the cluster structure in the projection space without relying 
-        on the XD model assumptions in high-dimensional space.
         """
 
         # Ensures analysis has been run before plotting

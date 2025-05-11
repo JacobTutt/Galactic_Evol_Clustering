@@ -1,0 +1,14 @@
+sphinx-rtd-theme==0.5.2
+nbsphinx==0.8.6
+sphinxcontrib-bibtex>=2.1
+sphinxcontrib-svg2pdfconverter>=1.2.3
+sphinx-gallery>=0.10.0
+sphinx>=5.0
+sphinxcontrib-applehelp
+sphinx-autodoc-typehints>=1.21.0 
+nbsphinx>=0.8.6
+myst-parser>=0.18.0                 
+readthedocs-sphinx-ext>=2.2.5        
+ipython>=8.18.1
+Pygments>=2.15.0
+numpy

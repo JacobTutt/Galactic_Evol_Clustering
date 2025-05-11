@@ -11,3 +11,16 @@ data/raw
 
 
 Literature
+
+# Sphinx build output
+docs/_build/
+docs/.doctrees/
+docs/.sphinx/
+docs/Makefile
+docs/make.bat
+
+# Build directories
+build/
+dist/
+*.egg-info/
+*.egg

@@ -32,27 +32,32 @@ class ReducedGMMPipeline:
     The pipeline follows these key steps:
 
     1. **Initialisation** (`__init__`):
-    - Accepts stellar data in various formats: Astropy Table, NumPy recarray, or Pandas DataFrame.
-    - Extracts the input features defined in `data_keys`.
-    - Standardises the data and performs dimensionality reduction using UMAP (typically to 2D for visualisation and clustering).
+
+    * Accepts stellar data in various formats: Astropy Table, NumPy recarray, or Pandas DataFrame.
+    * Extracts the input features defined in `data_keys`.
+    * Standardises the data and performs dimensionality reduction using UMAP (typically to 2D for visualisation and clustering).
 
     2. **Gaussian Mixture Model Fitting** (`run_GMM`):
+
     - Applies GMM clustering in the UMAP-reduced space.
     - Runs GMM for a user-defined range of component numbers and initialisations.
     - Stores log-likelihood, BIC, AIC scores, model weights, means, covariances, and predicted labels.
 
     3. **Model Comparison & Selection** (`compare_GMM`):
+
     - Compares fitted GMM models using BIC or AIC to select the optimal number of Gaussian components.
     - Allows filtering to evaluate a specific component count manually.
     - Assigns each star to a component based on the best (or filtered best) model.
 
     4. **Cluster Visualisation** (`plot_GMM_umap`):
+
     - Generates a 2D scatter plot in UMAP space, coloured by GMM cluster assignments.
     - Overlays confidence ellipses around each Gaussian component.
     - Displays marginal histograms and Gaussian curves for UMAP axes.
     - Includes a bar chart summarising the weight of each component.
 
     5. **High-Dimensional Interpretation** (`table_results_GMM`):
+
     - Computes and tabulates the mean and standard deviation of each original input feature per GMM cluster.
     - Supports custom cluster names and grouped/combined cluster analysis.
     - Helps relate low-dimensional clusters to their physical meaning in the original feature space.
@@ -515,6 +520,7 @@ class ReducedGMMPipeline:
         Visualize GMM clustering results in the 2D UMAP-reduced space with component ellipses and marginal histograms.
 
         This method creates a comprehensive figure showing:
+        
         - A scatter plot of stars in the 2D UMAP space colored by their GMM-assigned components.
         - Ellipses representing 2D confidence intervals (z-score-scaled) for each Gaussian component.
         - Marginal histograms for UMAP-1 and UMAP-2 projections overlaid with individual and total Gaussian fits.
@@ -653,10 +659,12 @@ class ReducedGMMPipeline:
         Generate a summary table of the GMM components, projecting labels from UMAP space back to the original feature space.
 
         For each Gaussian component, the table reports:
+
         - GMM weight (%), assigned star count, and count fraction
         - Mean ± standard deviation for each feature in `self.data_keys`
 
         Optional:
+
         - Rename and reorder components using `component_name_dict`
         - Combine selected components with `combine` and `labels_combined`
 
@@ -786,8 +794,11 @@ class ReducedGMMPipeline:
                 ylim: Optional[tuple] = None) -> None:
         """
         Visualize GMM component assignments in high-dimensional space for two selected features.
-
+        
+        Notes
+        -----
         Generates a 2D scatter plot of stars colored by GMM component, with:
+
         - Confidence ellipses estimated from the empirical mean/covariance of each component
         - Marginal histograms and overlaid Gaussian fits
         - Optional background 2D histogram from a reference survey
