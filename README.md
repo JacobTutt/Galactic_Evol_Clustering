@@ -1,6 +1,8 @@
 # Chemo-dynamical analysis of Milky Way’s stellar populations with unsupervised multi-dimensional clustering
 ## Supervisor: Dr GyuChul Myeong, Institute of Astronomy
 
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 This repository aims to reproduce and build upon the paper:  `Milky Way’s Eccentric Constitutents with Gaia, APOGEE, and
 GALAH`, Myeong 2022
 
@@ -8,7 +10,7 @@ GALAH`, Myeong 2022
 
 # Installation Instructions
 
-To run the notebooks, please follow these steps:
+To reproduce the analysis in these notebooks, please follow these steps:
 
 ## 1. Clone the Repository
 
@@ -47,8 +49,6 @@ To install the package, follow these steps, or see the source repositories `READ
 **Installation Steps:**
 
 1.  **Clone the Repository**
-
-    - An installation of this is included within the repository already to make this process easier, however to ensure the most up to version you may wish to reclone.
 
     ```bash
     git clone [https://github.com/jobovy/extreme-deconvolution.git](https://github.com/jobovy/extreme-deconvolution.git)

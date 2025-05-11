@@ -21,3 +21,6 @@ tabulate
 
 # Advanced Stats and Plotting
 umap-learn
+
+# Clustering
+hdbscan
