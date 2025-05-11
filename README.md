@@ -78,7 +78,7 @@ The analysis pipelines within this repository are constained with the [analysis/
 - Explores and visualises how well stellar populations separate in low-dimensional UMAP space as well as test the behaviour of unsupervised methods (GMM or HDBSCAN) before applying full clustering pipelines.
 
 ## Documentation
-Detailed documentation of the available pipelines is available [here](www.documentation.com).
+Detailed documentation of the available pipelines is available [here](https://galactic-evol-clustering.readthedocs.io/en/latest/).
 
 ## Notebooks
 
