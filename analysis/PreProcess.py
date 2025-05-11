@@ -343,6 +343,7 @@ def galah_filter(star_data_in, dynamics_data_in, gaia_data_in, save_path=None):
     star_data['r_med_photogeo'] = gaia_data['r_med_photogeo']
     star_data['r_lo_photogeo'] = gaia_data['r_lo_photogeo']
     star_data['r_hi_photogeo'] = gaia_data['r_hi_photogeo']
+    star_data['phot_g_mean_mag'] = gaia_data['phot_g_mean_mag']
 
 
     # ------------------ Filter Eccentricity and Energy and Apocenter ------------------

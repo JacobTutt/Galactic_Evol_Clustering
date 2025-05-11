@@ -34,7 +34,7 @@ class XDPipeline:
        - Extracts relevant features defined by `data_keys` and their errors `data_err_keys`.
 
     2. **Extreme Deconvolution (XD)** (`run_XD`):
-       - Normalises the dataset for efficient convergence.
+       - Normalises the dataset for efficient convergence. (Optional: scaling)
        - Runs XD over a specified range of Gaussian components.
        - Iterates through multiple random initialisations to ensure robust fitting.
        - Uses BIC and AIC scores to evaluate model performance.
@@ -69,6 +69,9 @@ class XDPipeline:
         List of feature name keys to be used for fitting the Gaussian Mixture Model.
     data_err_keys : List[str]
         List of measurement uncertainty keys corresponding to feature keys.
+    scaling : bool
+        If True, standardise the features to have zero mean and unit variance.
+        If False, no scaling is applied globally, but energy-related columns ('E_50' or 'Energy') are divided by 1e5 for consistency.
 
     Attributes
     ----------
@@ -105,6 +108,7 @@ class XDPipeline:
             star_data (Table, np.recarray, pd.DataFrame): Dataset containing stellar information, which can be an Astropy Table, NumPy recarray, or Pandas DataFrame.
             data_keys (List[str]): List of column names representing features used in the GMM fitting.
             data_err_keys (List[str]): List of column names representing measurement uncertainties, corresponding to `data_keys`.
+            scaling (bool): If True, standardise the features to have zero mean and unit variance. If False, no scaling is applied globally, but energy-related columns ('E_50' or 'Energy') are divided by 1e5 for consistency.
 
         Raises:
             TypeError: If the input dataset is not a supported type.

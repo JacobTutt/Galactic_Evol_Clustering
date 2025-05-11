@@ -2,14 +2,11 @@ import matplotlib.pyplot as plt
 from astropy.table import Table
 from sklearn.preprocessing import StandardScaler
 import umap
+from hdbscan import HDBSCAN
 from sklearn.mixture import GaussianMixture
 import numpy as np
 import matplotlib.gridspec as gridspec
 from sklearn.manifold import TSNE
-
-
-### These functions are used to investigate the UMAP and t-SNE dimensionality reduction techniques and the UMAP is further extended to include GMM clustering as an initial step.
-# This is then built in a more comprehensive way in the `ReducedGMMPipeline` provided in the `Reduced_GMM.py` file.
 
 def investigate_umap(
     table_path,
@@ -19,50 +16,60 @@ def investigate_umap(
     labels_color_map,
     n_neighbors_list=[15, 15, 15],
     min_dist_list=[0.1, 0.3, 1],
-    GMM_enabled=True,
+    cluster_method=None,  # Accepts 'GMM', 'HDBSCAN', or None
     n_components_gmm=5,
+    min_cluster_size_hdbscan=30,
+    min_samples_hdbscan=1,
     axis_label_fontsize=14,
     tick_fontsize=13,
     title_fontsize=19,
     legend_fontsize=13
 ):
     """
-    Visualizes UMAP dimensionality reduction results on APOGEE-like data and optionally applies GMM clustering.
+    Visualizes UMAP dimensionality reduction results for a high-dimensional dataset and 
+    optionally applies clustering (GMM or HDBSCAN) in the reduced space.
 
     Parameters
     ----------
     table_path : str
-        Path to the FITS file containing the data table.
+        Path to the FITS file containing the dataset.
     data_keys : list of str
-        Column names to use as input features for dimensionality reduction.
+        List of column names to use as input features for UMAP.
     label_column : str
-        Column name representing true GMM cluster labels.
+        Column name containing original cluster assignments for coloring true label plots.
     labels_name : dict
-        Mapping from numeric GMM component indices to descriptive cluster names.
+        Dictionary mapping numerical cluster IDs to string labels (e.g. {1: 'GS/E', 2: 'Splash'}).
     labels_color_map : dict
-        Mapping from descriptive cluster names to color codes.
+        Dictionary mapping string labels to matplotlib-compatible color codes.
     n_neighbors_list : list of int, optional
-        List of neighbor values for UMAP configurations (one per column).
+        List of UMAP `n_neighbors` values, one per column of the plot grid.
     min_dist_list : list of float, optional
-        List of min_dist values for UMAP configurations (one per column).
-    GMM_enabled : bool, optional
-        If True, applies and plots GMM clustering below each UMAP plot.
+        List of UMAP `min_dist` values, one per column of the plot grid.
+    cluster_method : str or None, optional
+        If specified, applies unsupervised clustering in UMAP space. Options:
+        - 'GMM': Gaussian Mixture Model clustering (requires `n_components_gmm`).
+        - 'HDBSCAN': HDBSCAN clustering (requires `min_cluster_size_hdbscan` and `min_samples_hdbscan`).
+        - None: disables clustering, shows only UMAP colored by original labels.
     n_components_gmm : int, optional
-        Number of GMM clusters to use if GMM is enabled.
+        Number of clusters to fit for GMM if `cluster_method='GMM'`. Default is 5.
+    min_cluster_size_hdbscan : int, optional
+        Minimum cluster size for HDBSCAN. Only used if `cluster_method='HDBSCAN'`.
+    min_samples_hdbscan : int, optional
+        Minimum samples for HDBSCAN. Only used if `cluster_method='HDBSCAN'`.
     axis_label_fontsize : int, optional
         Font size for axis labels.
     tick_fontsize : int, optional
-        Font size for axis ticks.
+        Font size for axis tick labels.
     title_fontsize : int, optional
         Font size for row titles.
     legend_fontsize : int, optional
-        Font size for legends.
+        Font size for legend and text annotations.
 
     Returns
     -------
     None
+        Displays matplotlib figures with UMAP projections and clustering overlays if enabled.
     """
-    
     # Extrct the atropy table from the fits path
     tbl = Table.read(table_path, format='fits')
 
@@ -78,9 +85,9 @@ def investigate_umap(
     named_labels = np.array([labels_name[int(i)] for i in labels])
     unique_names = sorted(set(named_labels))
 
+    # Assign the number of graph rows based wether a clustering method is used or not
     n_cols = len(n_neighbors_list)
-    n_rows = 2 if GMM_enabled else 1
-
+    n_rows = 2 if cluster_method in ['GMM', 'HDBSCAN'] else 1
 
     # Plottig the UMAP results
     # Create a grid of subplots
@@ -90,13 +97,7 @@ def investigate_umap(
 
     for idx, (n_n, m_d) in enumerate(zip(n_neighbors_list, min_dist_list)):
         # For all UMAP configurations, apply the UMAP data reduction, obtaining the 2D coordinates
-        reducer = umap.UMAP(
-            n_components=2,
-            n_neighbors=n_n,
-            min_dist=m_d,
-            metric='euclidean',
-            random_state=42
-        )
+        reducer = umap.UMAP(n_components=2, n_neighbors=n_n, min_dist=m_d, random_state=42)
         X_umap = reducer.fit_transform(X_scaled)
 
         # Plot the UMAP results colour coded by the GMM labels from the XD clustering - no analysis has been done on the UMAP results at this stage
@@ -104,49 +105,57 @@ def investigate_umap(
         axes[0, idx] = ax_top
         for name in unique_names:
             mask = named_labels == name
-            ax_top.scatter(
-                X_umap[mask, 0], X_umap[mask, 1],
-                label=name,
-                color=labels_color_map[name],
-                s=10, alpha=0.7
-            )
+            ax_top.scatter(X_umap[mask, 0], X_umap[mask, 1],
+                           label=name, color=labels_color_map[name], s=10, alpha=0.7)
         ax_top.set_xlabel("UMAP-1", fontsize=axis_label_fontsize)
         ax_top.set_ylabel("UMAP-2", fontsize=axis_label_fontsize)
         ax_top.tick_params(axis='both', labelsize=tick_fontsize)
 
-        # If GMM is selected, we apply the GMM clustering results to the UMAP coordinates and compare the results visually to see the plausibility of the clusters results
-        if GMM_enabled:
-            # Apply GMM clustering to the UMAP coordinates
-            gmm = GaussianMixture(n_components=n_components_gmm, covariance_type='full', random_state=9)
-            gmm_labels = gmm.fit_predict(X_umap)
+        # Add UMAP params to top-right of each plot
+        ax_top.text(0.99, 0.98, f"n_neighbors={n_n}\nmin_dist={m_d}",
+                    transform=ax_top.transAxes, ha='right', va='top',
+                    fontsize=legend_fontsize,
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
 
-            # Plot the GMM results - the color/ labeling of these is `random` each time so no labels are used or assigned - expecially with APOGEE where we obtain poor results
+        # If a clustering method is selected, we apply clustering to the UMAP coordinates and compare the results visually to see the plausibility of the clusters results
+        # GMM Clustering
+        if cluster_method == 'GMM':
+            gmm = GaussianMixture(n_components=n_components_gmm, random_state=9)
+            cluster_labels = gmm.fit_predict(X_umap)
+        
+        # HDBSCAN Clustering
+        elif cluster_method == 'HDBSCAN':
+            hdb = HDBSCAN(min_cluster_size=min_cluster_size_hdbscan, min_samples=min_samples_hdbscan)
+            cluster_labels = hdb.fit_predict(X_umap)
+        else:
+            cluster_labels = None
+
+        # Plot the clustering results - the color/ labeling of these is `random` each time so no labels are used or assigned - expecially with APOGEE where we obtain poor results
+        if cluster_labels is not None:
             ax_bot = fig.add_subplot(gs[1, idx])
             axes[1, idx] = ax_bot
-            ax_bot.scatter(X_umap[:, 0], X_umap[:, 1], c=gmm_labels, cmap='tab10', s=10, alpha=0.7)
+            ax_bot.scatter(X_umap[:, 0], X_umap[:, 1], c=cluster_labels, cmap='tab10', s=10, alpha=0.7)
             ax_bot.set_xlabel("UMAP-1", fontsize=axis_label_fontsize)
             ax_bot.set_ylabel("UMAP-2", fontsize=axis_label_fontsize)
             ax_bot.tick_params(axis='both', labelsize=tick_fontsize)
 
-            # Add UMAP params to top-left of each GMM plot
-            ax_bot.text(
-                0.01, 0.98,
-                f"n_neighbors={n_n}\nmin_dist={m_d}",
-                transform=ax_bot.transAxes,
-                ha='left', va='top',
-                fontsize=legend_fontsize,
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7)
-            )
-
     # Add titles to the plots
-    if GMM_enabled:
-        fig.text(0.5, 0.52, "GMM Clustering", ha='center', va='top', fontsize=title_fontsize)
+    if cluster_method:
+        fig.text(0.5, 0.52, f"{cluster_method} Clustering", ha='center', va='top', fontsize=title_fontsize)
     fig.text(0.5, 1.0, "True Labels", ha='center', va='bottom', fontsize=title_fontsize)
-
 
     # Add XD labels to the top-left the UMAP plot
     handles, labels_ = axes[0, 0].get_legend_handles_labels()
     axes[0, 0].legend(handles, labels_, title='True Label', loc='upper left', fontsize=legend_fontsize)
+
+    # if cluster_method == 'HDBSCAN' add clustering hyperparameters to the top-left of each plot
+    if cluster_method == 'HDBSCAN':
+        for ax in axes[1, :]:
+            ax.text(0.01, 0.98,
+                    f"min_cluster_size={min_cluster_size_hdbscan}\nmin_samples={min_samples_hdbscan}",
+                    transform=ax.transAxes, ha='left', va='top',
+                    fontsize=legend_fontsize,
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
 
     plt.show()
 
