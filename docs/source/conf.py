@@ -50,7 +50,8 @@ autodoc_mock_imports = [
     "tabulate",
     "umap",
     "hdbscan",
-    "extreme_deconvolution"
+    "extreme_deconvolution", 
+    "mpl_toolkits"
 ]
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
