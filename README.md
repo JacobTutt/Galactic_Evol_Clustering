@@ -47,13 +47,13 @@ The full data used for the project can be found here:
 | Directory      | Description |
 |----------------|-------------|
 | `data/raw/`         | The full surveys datasets as well as Value Added Catalogues (VACs) before effective cuts have been applied. These are predominantly required in [Notebook 0](0_data_preprocessing.ipynb) which constructed the datasets used throughout the analysis. They are also used within the ploting of GMM results to provide background context on the overall data distribution (although this can be easily removed by removing the `full_survey_file` input path). |
-| `data/filtered/`    | Holds the resultant APOGEE and GALAH datasets after quality and scientific cuts have been applied (built in [Notebook 0](0_data_preprocessing.ipynb)). These are also included directly in the GitHub repository. |
+| [`data/filtered/`](data/filtered/)    | Holds the resultant APOGEE and GALAH datasets after quality and scientific cuts have been applied (built in [Notebook 0](0_data_preprocessing.ipynb)). These are also included directly in the GitHub repository. |
 
 Additionally the repository contains:
 
 | Directory      | Description |
 |----------------|-------------|
-| `XD_Results/` |  Stores intermediate outputs from all initialisation of the clustering pipelines, including Gaussian parameters (means and covariances), model selection scores (e.g., AIC/BIC), and assignment probabilities. This allows the user to recreate the results without rerunning the full pipeline (computationally expensive). |
+| [`XD_Results/`](XD_results/) |  Stores intermediate outputs from all initialisation of the clustering pipelines, including Gaussian parameters (means and covariances), model selection scores (e.g., AIC/BIC), and assignment probabilities. This allows the user to recreate the results without rerunning the full pipeline (computationally expensive). |
 
 ## Pipelines
 The analysis pipelines within this repository are constained with the [analysis/](analysis/) directory and contains the following: 

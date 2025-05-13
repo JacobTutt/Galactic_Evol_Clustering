@@ -638,11 +638,27 @@ class XDPipeline:
 
             # Optional Zoom in Option for the top right
             if zoom_in:
-                axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
-                # BIC - Blue
-                axins.plot(n_gauss_list, BIC_min, 'b-')
-                axins.plot(n_gauss_list, BIC_max, 'b--') 
-                axins.plot(n_gauss_list, BIC_median, 'b:')
+                # Create inset axes for zoomed in view
+                if opt_metric == 'BIC':
+                    zoom_in_min = BIC_min
+                    zoom_in_max = BIC_max
+                    zoom_in_median = BIC_median
+                    axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
+                    # BIC - Blue
+                    axins.plot(n_gauss_list, zoom_in_min, 'b-')
+                    axins.plot(n_gauss_list, zoom_in_max, 'b--') 
+                    axins.plot(n_gauss_list, zoom_in_median, 'b:')
+
+                if opt_metric == 'AIC':
+                    zoom_in_min = AIC_min
+                    zoom_in_max = AIC_max
+                    zoom_in_median = AIC_median
+                    axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
+                    # AIC - Red
+                    axins.plot(n_gauss_list, zoom_in_min, 'r-')
+                    axins.plot(n_gauss_list, zoom_in_max, 'r--')
+                    axins.plot(n_gauss_list, zoom_in_median, 'r:')
+
 
                 # Set x-axis limits from zoom_in list
                 axins.set_xlim(min(zoom_in) - 0.5 , max(zoom_in) + 0.5)
@@ -650,8 +666,14 @@ class XDPipeline:
                 # Set y-axis limits based on BIC values in zoomed range
                 mask = [(x in zoom_in) for x in n_gauss_list]
                 if any(mask):
-                    zoom_bic = [b for b, m in zip(BIC_min, mask) if m]
-                    axins.set_ylim(min(zoom_bic) * 0.99, max(zoom_bic) * 1.02)
+                    if opt_metric == 'BIC':
+                        zoom_bic = [b for b, m in zip(BIC_min, mask) if m]
+                        axins.set_ylim(min(zoom_bic) * 0.99, max(zoom_bic) * 1.02)
+                    
+                    if opt_metric == 'AIC':
+                        zoom_aic = [a for a, m in zip(AIC_min, mask) if m]
+                        axins.set_ylim(min(zoom_aic) * 0.99, max(zoom_aic) * 1.02)
+
                 mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
 
             plt.tight_layout()

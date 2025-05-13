@@ -556,7 +556,7 @@ def apogee_filter(star_data_in, SQL=False, save_path=None):
         ti_fe_error_filter = star_data['ti_fe_err'] < 0.1
         alpha_fe_err_filter = o_fe_error_filter & mg_fe_error_filter & si_fe_error_filter & ca_fe_error_filter & ti_fe_error_filter
     else:
-        alpha_fe_err_filter = star_data['alpha_fe_err'] < 0.1
+        alpha_fe_err_filter = star_data['alpha_m_err'] < 0.1
 
     alpha_fe_filter = alpha_fe_flag_filter & alpha_fe_err_filter 
 
