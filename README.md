@@ -1,4 +1,5 @@
-# Chemo-dynamical analysis of Milky Way’s stellar populations with unsupervised multi-dimensional clustering
+# (WIP Title): **Unveiling the Milky Way’s Formation History: A Comparison of APOGEE and GALAH in Resolving Chemo-Dynamical Substructure**
+
 ## Author: Jacob Tutt, Department of Physics, University of Cambridge
 ### Supervisor: Dr GyuChul Myeong, Institute of Astronomy, University of Cambridge
 
@@ -7,12 +8,12 @@
 
 ## Description
 
-The primary objective of this project is to ensure the reproducability of results presented in the paper: [Milky Way’s Eccentric Constitutents with Gaia, APOGEE, and
+The primary objective of this project is to investigate the reproducability of results presented in the paper: [Milky Way’s Eccentric Constitutents with Gaia, APOGEE, and
 GALAH, Myeong et al 2022](https://iopscience.iop.org/article/10.3847/1538-4357/ac8d68). In addition to replicating the original analysis, this work explores the use of dimensionality reduction techniques to:
 
 1. Better understand the coherence of stellar populations identified through high dimensional clustering.
 
-2. Compare the success of the APOGEE and GALAH surveys in recovering the Milky Way’s assembly history through chemo-dynamical analysis
+2. Compare the success of the APOGEE and GALAH surveys in recovering the Milky Way’s assembly history.
 
 3. Prepose suggestions to future approaches of clustering algorthims to improve convergence, scalability and stability for greater applicability to the larger scale datasets from upcoming spectroscopic surveys such as WEAVE and 4MOST. 
 

@@ -288,6 +288,7 @@ class XDPipeline:
         self.n_init = n_init
         self.save_path_XD = save_path
 
+
         # OPTIONAL - Scale the data to have zero mean and unit variance - this will improve the convergence of the EM algorithm
         # Errors are scaled by the same factor to maintain the same relative uncertainty
         # Note this will require the gaussians means and covariances returned by XD to be scaled back to the original units for interpretation before saving
@@ -346,8 +347,15 @@ class XDPipeline:
                     # Randomly initialise means from the scaled values range
                     init_mean = np.random.uniform(low=scaled_min, high=scaled_max, size=(n_gauss, self.n_features))
 
-                    # Covariances initialised as identity matrices
-                    init_covar = np.array([np.identity(self.n_features) for _ in range(n_gauss)])
+                    if self.scaling:
+                        # Covariances initialised as identity matrices
+                        init_covar = np.array([np.identity(self.n_features) for _ in range(n_gauss)])
+
+                    else:
+                    # Initialise the covariance matricies so each diagonal element has the variance of the data in that dimension
+                        init_covar = np.array([np.diag(np.var(self.feature_data, axis=0)) for _ in range(n_gauss)])
+
+
                     # Run XD
                     try:
                         XD_avg_LL = extreme_deconvolution(
@@ -740,10 +748,14 @@ class XDPipeline:
 
             feature_data_scaled = scaler.transform(self.feature_data)
             errors_data_scaled = self.errors_data / scaling_factors
+
         else:
             # No scaling applied: use original data and model parameters directly
-            means_scaled = assignment_params['XD_means']
-            covs_scaled = assignment_params['XD_covariances']
+            means_scaled = np.array(assignment_params['XD_means'], dtype=np.float64)
+            covs_scaled = np.array([
+                np.array(cov, dtype=np.float64)
+                for cov in assignment_params['XD_covariances']
+            ])
             feature_data_scaled = self.feature_data
             errors_data_scaled = self.errors_data
 
@@ -831,6 +843,11 @@ class XDPipeline:
         covariances = assignment_params['XD_covariances']
         weights = assignment_params['XD_weights']
         n_components = assignment_params['gauss_components']
+
+        # Ensure the parameters are in the correct format
+        weights = np.array(weights, dtype=np.float64)
+        means = np.array(means, dtype=np.float64)
+        covariances = np.array(covariances, dtype=np.float64)
 
         # Count how many stars are assigned to each Gaussian component
         component_counts = np.array([(self.star_data['max_gauss'] == i+1).sum() for i in range(n_components)])
@@ -1005,6 +1022,12 @@ class XDPipeline:
         covariances = assignment_params['XD_covariances']
         weights = assignment_params['XD_weights']
         n_components = assignment_params['gauss_components']
+
+        # Ensures the parameters are in the correct format
+        means = np.array(means, dtype=np.float64)
+        covariances = np.array(covariances, dtype=np.float64)
+        weights = np.array(weights, dtype=np.float64)
+
 
         # Retrieves relevant keys index positions
         x_index = self.data_keys.index(x_key)
@@ -1245,6 +1268,9 @@ class XDPipeline:
         # Extracts GMM parameters from the relevant best-fit analysis
         weights = assignment_params['XD_weights']
         n_components = assignment_params['gauss_components']
+
+        # Ensures the parameters are in the correct format
+        weights = np.array(weights, dtype=np.float64)
 
         # Retrieves column index directly from the star_data table
         x_index = self.star_data.colnames.index(x_key)
