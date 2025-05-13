@@ -547,7 +547,8 @@ def apogee_filter(star_data_in, SQL=False, save_path=None):
     else: 
         alpha_fe_flag_filter = star_data['alpha_fe_flag'] == 0
 
-    if 'alpha_fe_err' not in star_data.colnames:
+    # Update this
+    if 'alpha_m_err' not in star_data.colnames:
         o_fe_error_filter = star_data['o_fe_err'] < 0.1
         mg_fe_error_filter = star_data['mg_fe_err'] < 0.1   
         si_fe_error_filter = star_data['si_fe_err'] < 0.1
@@ -654,5 +655,33 @@ def apogee_filter(star_data_in, SQL=False, save_path=None):
     if save_path:
         star_data.write(save_path, format="fits", overwrite=True)
         logging.info(f"Filtered dataset saved to {save_path}")
+
+    print("\n=== Filter Diagnostics: Stars Rejected by Each Criterion ===")
+
+    # Convert to full table if not already
+    original_data = convert_to_astropy_table(star_data_in)
+    N_initial = len(original_data)
+
+    # Diagnostic counts for each mask
+    filters = {
+        "Main Red Stars (extratarg == 0)": mrs_filter,
+        "logg < 3.0": rg_filter,
+        "[Fe/H] quality": fe_h_filter,
+        "[Al/Fe] quality": al_fe_filter,
+        "[Ce/Fe] quality": ce_fe_filter,
+        "[Mg/Mn] quality": mg_mn_filter,
+        "[alpha/Fe] quality": alpha_fe_filter,
+        "Eccentricity > 0.85": ecc_filter,
+        "Energy < 0": energy_filter,
+    }
+
+    for name, mask in filters.items():
+        n_failed = N_initial - np.sum(mask)
+        print(f"{name:30s} → {n_failed:4d} stars removed")
+    
+    # SQL-based filtering
+    if SQL:
+        n_sql_failed = len(star_data) + np.sum(missing_ids_position) - np.sum(dist_err_filter_hi & dist_err_filter_lo)
+        print(f"Gaia SQL distance cut           → {n_sql_failed:4d} stars removed")
 
     return star_data   
