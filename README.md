@@ -1,4 +1,4 @@
-# (WIP Title): **Unveiling the Milky Way’s Formation History: A Comparison of APOGEE and GALAH in Resolving Chemo-Dynamical Substructure**
+# **Unveiling the Milky Way’s Formation History: A Comparison of APOGEE and GALAH in Resolving Chemo-Dynamical Substructure**
 
 ## Author: Jacob Tutt, Department of Physics, University of Cambridge
 ### Supervisor: Dr GyuChul Myeong, Institute of Astronomy, University of Cambridge

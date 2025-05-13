@@ -549,6 +549,8 @@ def apogee_filter(star_data_in, SQL=False, save_path=None):
 
     # Update this
     if 'alpha_m_err' not in star_data.colnames:
+        
+    
         o_fe_error_filter = star_data['o_fe_err'] < 0.1
         mg_fe_error_filter = star_data['mg_fe_err'] < 0.1   
         si_fe_error_filter = star_data['si_fe_err'] < 0.1
