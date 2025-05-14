@@ -1,6 +1,7 @@
 import numpy as np
 from tabulate import tabulate
 import pandas as pd
+from collections import defaultdict, Counter
 
 from astropy.table import Table
 from astropy.io import fits
@@ -1478,3 +1479,107 @@ class XDPipeline:
         ax_bar.set_axisbelow(True)
 
         plt.show()
+
+
+
+def compare_assignments(results_table, target_label, label_map):
+    """
+    For stars primarily assigned to `target_label`, this function:
+
+    Notes
+    -----
+
+    * Finds their second-best Gaussian component assignments
+    * Summarizes how often each second-best component occurs
+    * Calculates the mean, median, and standard deviation of:
+        * The percent of the first-best probability that the second-best achieved
+        * The absolute difference in probability between the first and second-best
+        
+    Parameters
+    ----------
+    results_table : Astropy Table
+        Contains Gaussian Mixture Model results.
+
+    target_label : str
+        Name of the component youre analysing (e.g., "Aurora") to int.
+
+    label_map : dict
+        Maps of intenger indices (starting from 1) to astrophysical names of componets.
+    """
+
+    # Map the input target label to its corresponding Gaussian number
+    target_gauss = next((k for k, v in label_map.items() if v == target_label), None)
+    if target_gauss is None:
+        raise ValueError(f"Label '{target_label}' not found in label_map.")
+
+    # Identify all rows where this component is the maximum assignment ie items 'belonging to this assignment'
+    matching_rows = results_table[results_table['max_gauss'] == target_gauss]
+
+    if len(matching_rows) == 0:
+        print(f"No stars found for primary label '{target_label}'.")
+        return
+
+    # Extract the probability assigned to each component from the results table and stack them into idependent columns 
+    # Resultant shape: (n_stars, n_components)
+    prob_cols = [col for col in results_table.colnames if col.startswith("prob_gauss_")]
+    prob_array = np.vstack([matching_rows[col] for col in prob_cols]).T
+
+    # For each remaining star row in this table, identify the indices of the best and second-best components
+    # The best is simply the input target label 
+
+    # Sort the indiceies of the column by increasing probability
+    sorted_indices = np.argsort(prob_array, axis=1) 
+
+    # Get the best and second-best indices so their value can be compared later
+    best_indices = sorted_indices[:, -1]                    
+    second_best_indices = sorted_indices[:, -2]       
+
+    # Retrieve actual probabilities using these indices 
+    best_probs = np.take_along_axis(prob_array, best_indices[:, None], axis=1).flatten()
+    second_probs = np.take_along_axis(prob_array, second_best_indices[:, None], axis=1).flatten()
+
+    # Calculate relative (percentage) and absolute differences in best and second-best probabilities
+    percent_diffs = 100 * (second_probs / best_probs)        
+    absolute_diffs = np.abs(best_probs - second_probs)      
+
+    # Group percent and absolute differences by second-best component and store them so they can be displayed
+    percent_stats = defaultdict(list)
+    abs_stats = defaultdict(list)
+    for idx, sec_idx in enumerate(second_best_indices):
+        gauss_num = sec_idx + 1 
+        percent_stats[gauss_num].append(percent_diffs[idx])
+        abs_stats[gauss_num].append(absolute_diffs[idx])
+
+    
+    # Displaying the results
+
+    # Build and display the output summary table
+    print(f"\nDetailed second-best breakdown for stars primarily assigned to '{target_label}':")
+    print(f"Total stars: {len(matching_rows)}\n")
+
+    # Define headers and table structure
+    table_headers = [
+        "Second-Best Component", "# Stars", 
+        "Mean % of 1st", "Std % of 1st", "Median % of 1st",
+        "Mean Abs Diff", "Median Abs Diff", "Std Abs Diff"
+    ]
+    table_rows = []
+
+    # Enter all the data into the table
+    for gauss_num in sorted(percent_stats.keys(), key=lambda x: -len(percent_stats[x])):
+        label = label_map.get(gauss_num, f"Gaussian {gauss_num}")
+        percent_list = percent_stats[gauss_num]
+        abs_list = abs_stats[gauss_num]
+        table_rows.append([
+            label,
+            len(percent_list),
+            f"{np.mean(percent_list):.2f}",
+            f"{np.std(percent_list):.2f}",
+            f"{np.median(percent_list):.2f}",
+            f"{np.mean(abs_list):.6f}",
+            f"{np.median(abs_list):.6f}",
+            f"{np.std(abs_list):.6f}"
+        ])
+
+    # Display table
+    print(tabulate(table_rows, headers=table_headers, tablefmt="github"))
