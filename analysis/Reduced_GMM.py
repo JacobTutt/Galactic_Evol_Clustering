@@ -68,6 +68,8 @@ class ReducedGMMPipeline:
         Input dataset containing stellar observations and features.
     data_keys : List[str]
         List of feature names (column keys) to be used for UMAP projection and back-analysis.
+    error_data_keys : List[str]
+        List of error feature names (column keys) corresponding to the data keys. Must be same length and order as `data_keys`.
     umap_dimensions : int
         Number of dimensions to project the data into using UMAP (default is 2).
     umap_n_neighbors : int
@@ -100,7 +102,7 @@ class ReducedGMMPipeline:
     - Final cluster properties are summarised in both reduced and full feature spaces.
     - Supports flexible visualisation, label customisation, and component combination for interpretation.
     """
-    def __init__(self, star_data: Union[Table, np.recarray, pd.DataFrame], data_keys: List[str], umap_dimensions: int = 2, umap_n_neighbors: int = 15, umap_min_dist: float = 0.1):
+    def __init__(self, star_data: Union[Table, np.recarray, pd.DataFrame], data_keys: List[str], error_data_keys: List[str],  umap_dimensions: int = 2, umap_n_neighbors: int = 15, umap_min_dist: float = 0.1):
         """
         Initialise the XDPipeline for UMAP-based dimensionality reduction and GMM clustering.
 
@@ -115,6 +117,9 @@ class ReducedGMMPipeline:
             Stellar dataset containing the features of interest. Can be an Astropy Table, NumPy recarray, or Pandas DataFrame.
         data_keys : List[str]
             List of column names specifying the features to use for dimensionality reduction and clustering.
+        error_data_keys : List[str]
+            List of column names specifying the errors corresponding to the features in `data_keys`.
+            Must be the same length and order as `data_keys`.
         umap_dimensions : int, optional
             Target number of UMAP dimensions (default is 2).
         umap_n_neighbors : int, optional
@@ -138,6 +143,10 @@ class ReducedGMMPipeline:
             star_data = Table.from_pandas(star_data)  # Convert DataFrame to Table
         elif not isinstance(star_data, Table):
             raise TypeError("Unsupported data type. Must be an Astropy Table, NumPy recarray, or Pandas DataFrame.")
+
+        # Check that the data keys and error keys are the same length
+        if len(data_keys) != len(error_data_keys):
+            raise ValueError("The number of data keys must match the number of error keys.")
         
         # Extract column names
         colnames = star_data.colnames
@@ -153,6 +162,7 @@ class ReducedGMMPipeline:
         # Store the data, data keys
         self.star_data = star_data
         self.data_keys = data_keys
+        self.data_err_keys = error_data_keys
         self.umap_dimensions = umap_dimensions
         self.umap_n_neighbors = umap_n_neighbors
         self.umap_min_dist = umap_min_dist
@@ -160,6 +170,9 @@ class ReducedGMMPipeline:
         # Using the UMAP parameters
         # Extract the data and their errors from the data using the keys provided and stack them into a 2D array, (number_of_parameters, number_of_samples)
         self.feature_data = np.vstack([np.asarray(self.star_data[key]) for key in self.data_keys]).T
+
+        # Extract the errors from the astropy table using the keys provided
+        self.errors_data = np.vstack([np.asarray(self.star_data[err_key]) for err_key in self.data_err_keys]).T
 
         # Standardise the data to have zero mean and unit variance before applying UMAP-Dimensionality Reduction
         self.scaler = StandardScaler()
@@ -654,7 +667,7 @@ class ReducedGMMPipeline:
         ax_bar.set_axisbelow(True)
         plt.show()
     
-    def table_results_GMM(self, component_name_dict: dict = None, combine: list = None, labels_combined: list = None) -> pd.DataFrame:
+    def table_results_GMM(self, component_name_dict: dict = None, combine: list = None, labels_combined: list = None,  deconvolve: bool = False) -> pd.DataFrame:
         """
         Generate a summary table of the GMM components, projecting labels from UMAP space back to the original feature space.
 
@@ -667,6 +680,7 @@ class ReducedGMMPipeline:
 
         - Rename and reorder components using `component_name_dict`
         - Combine selected components with `combine` and `labels_combined`
+        - Deconvolve observational uncertainties from the feature standard deviations using `deconvolve=True`
 
         Parameters
         ----------
@@ -676,6 +690,11 @@ class ReducedGMMPipeline:
             List of component index groups to aggregate.
         labels_combined : list of str, optional
             Labels for each group in `combine`.
+        deconvolve : bool, optional
+            If True, subtracts the mean squared observational error (from `self.data_err_keys`)
+            from the variance of each feature before computing the standard deviation.
+            Assumes independent Gaussian errors. Requires `self.data_err_keys` to be defined
+            and aligned with `self.data_keys`.
 
         Returns
         -------
@@ -728,16 +747,28 @@ class ReducedGMMPipeline:
             table_data["Count (%)"].append(count_pct)
 
             # For all the features in the high dimensional space, calculate the mean and std and add them to the table
-            for key in self.data_keys:
+            # for key in self.data_keys:
+            for i in range(len(self.data_keys)):
+                key = self.data_keys[i]
+
                 values = np.array(self.star_data[key])[mask]
                 mean = np.mean(values)
                 std = np.std(values)
+
+                if deconvolve:
+                    # If deconvolution is used, we need to use the error keys to get the mean and std
+                    error_key = self.data_err_keys[i]
+                    error_values = np.array(self.star_data[error_key])[mask]
+                    mean_error_squared = np.mean(error_values ** 2)
+                    # Deconvolve the mean std deviation of gaussian fitted
+                    var = std**2 - mean_error_squared
+                    std = np.sqrt(var) if var > 0 else 0.0
+                
                 col = table_data.get(key, [])
                 col.append(f"{mean:.2f} ± {std:.2f}")
                 table_data[key] = col
 
         df = pd.DataFrame(table_data)
-
 
         # Rename or reorder if desired
         if component_name_dict:
@@ -774,10 +805,23 @@ class ReducedGMMPipeline:
                     "Count (%)": count_pct
                 }
 
-                for key in self.data_keys:
+                for i in range(len(self.data_keys)):
+                    key = self.data_keys[i]
+
                     values = np.array(self.star_data[key])[combined_mask]
                     mean = np.mean(values)
                     std = np.std(values)
+
+                    if deconvolve:
+                        # If deconvolution is used, we need to use the error keys to get the mean and std
+                        error_key = self.data_err_keys[i]
+                        error_values = np.array(self.star_data[error_key])[combined_mask]
+                        mean_error_squared = np.mean(error_values ** 2)
+                        # Deconvolve the mean std deviation of gaussian fitted
+                        var = std**2 - mean_error_squared
+                        std = np.sqrt(var) if var > 0 else 0.0
+                        
+                
                     row[key] = f"{mean:.2f} ± {std:.2f}"
 
                 combined_rows.append(row)
@@ -791,16 +835,15 @@ class ReducedGMMPipeline:
                 full_survey_file: Optional[str] = None,
                 color_palette: Optional[list] = None,
                 xlim: Optional[tuple] = None,
-                ylim: Optional[tuple] = None) -> None:
+                ylim: Optional[tuple] = None, 
+                deconvolve: bool = False) -> None:
         """
         Visualize GMM component assignments in high-dimensional space for two selected features.
-        
-        Notes
-        -----
+
         Generates a 2D scatter plot of stars colored by GMM component, with:
 
-        - Confidence ellipses estimated from the empirical mean/covariance of each component
-        - Marginal histograms and overlaid Gaussian fits
+        - Confidence ellipses estimated from the empirical mean and covariance of each component
+        - Marginal histograms with overlaid Gaussian fits
         - Optional background 2D histogram from a reference survey
         - Top-right bar chart showing GMM component weights
 
@@ -820,6 +863,11 @@ class ReducedGMMPipeline:
             x-axis limits (min, max).
         ylim : tuple, optional
             y-axis limits (min, max).
+        deconvolve : bool, optional
+            If True, subtracts the mean squared observational errors (from `self.data_err_keys`)
+            from the empirical covariance matrix of each component before plotting the ellipses.
+            This reveals the intrinsic spread of each GMM component, assuming independent
+            Gaussian measurement errors in x and y.
 
         Raises
         ------
@@ -846,8 +894,13 @@ class ReducedGMMPipeline:
         n_components = assignment_params['gauss_components']
 
         # Retrieves column index directly from the star_data table
-        x_index = self.star_data.colnames.index(x_key)
-        y_index = self.star_data.colnames.index(y_key)
+        x_index = self.data_keys.index(x_key)
+        y_index = self.data_keys.index(y_key)
+
+        if deconvolve:
+            # Extract relavent error keys - which are the same order as the data keys
+            x_error_key = self.data_err_keys[x_index]
+            y_error_key = self.data_err_keys[y_index]
 
         # Extracts the individual star data
         x_data = np.asarray(self.star_data[x_key])
@@ -862,11 +915,27 @@ class ReducedGMMPipeline:
         for i in range(0, n_components):
             # Select data for component i
             cluster_points = xy_data[assignments == i]
+            if deconvolve:
+                # Extract the error data for the relevant component
+                x_error_data = np.asarray(self.star_data[x_error_key])[assignments == i]
+                y_error_data = np.asarray(self.star_data[y_error_key])[assignments == i]
+
+                # Work out the 2x2 covariance matrix for the errors
+                var_x_err = np.mean(x_error_data ** 2)
+                var_y_err = np.mean(y_error_data ** 2)
+
+                error_cov = np.array([[var_x_err, 0], [0, var_y_err]])
+
             if len(cluster_points) < 2:
                 continue  # Skip components with insufficient points
             # Compute mean and covariance
             mean = np.mean(cluster_points, axis=0)
             cov = np.cov(cluster_points, rowvar=False)
+            # If deconvolution is used, we need to add the error covariance to the data covariance
+            if deconvolve:
+                # Add the remove the data covariance
+                cov -= error_cov
+
             ellipse_params.append((mean, cov))
 
         # Set axis labels (custom formatting) - Use scaled or unscaled labels based on the scaling flag
