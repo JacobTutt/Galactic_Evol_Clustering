@@ -19,7 +19,9 @@ The notebooks in this repository serve as descriptions of the pipeline design, m
      - A demonstration of the XD pipeline’s handling of manually adjusted or unscaled energy dimensions.
    * - ``4_dimreduction_investigate.ipynb``
      - Uses dimensionality reduction to explore structure stability and investigate clustering performance in low-dimensional space.
-   * - ``5_galah_reconstruction.ipynb``
-     - Overview of the pipeline that automates robust dimensionality mapping, clustering, and analysis on GALAH data, along with visualised results. 
-   * - ``6_increase_dim_apogee.ipynb``
-     - An investigation into potential additional features in the APOGEE dataset to better isolate the Aurora population and improve cluster separation.
+   * - ``5_apogee_assignment_statistic.ipynb``
+     - A Notebook demonstrating the cluster assignment analysis pipeline and investigating the Aurora Population.
+   * - ``[6_galah_reconstruction.ipynb``
+     - Overview of the pipeline that automates robust dimensionality mapping, clustering, and analysis on GALAH data, along with visualised results.
+   * - ``7_6D_galah_reconstruction.ipynb``
+     - Here we investigate the success of GALAH at resolving these structures and whether this is simply attributed to the Higher Dimensionality of Chemical Abundances or the dataset itself.
