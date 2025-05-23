@@ -17,6 +17,7 @@ import seaborn as sns
 from matplotlib.patches import Ellipse
 from matplotlib.ticker import FuncFormatter
 import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
 
@@ -619,21 +620,21 @@ class XDPipeline:
 
         if display_full:
             # Plot combined BIC & AIC
-            fig, ax = plt.subplots(figsize=(6, 8))
+            fig, ax = plt.subplots(figsize=(6, 7))
             # BIC - Blue
             ax.plot(n_gauss_list, BIC_min, 'b-', label="BIC")
-            ax.plot(n_gauss_list, BIC_max, 'b--') #, label="BIC - Highest")
-            ax.plot(n_gauss_list, BIC_median, 'b:') #, label="BIC - Median")
+            ax.plot(n_gauss_list, BIC_max, 'b:') #, label="BIC - Highest")
+            ax.plot(n_gauss_list, BIC_median, 'b--') #, label="BIC - Median")
 
             # AIC - Red
             ax.plot(n_gauss_list, AIC_min, 'r-', label="AIC")
-            ax.plot(n_gauss_list, AIC_max, 'r--') #, label="AIC - Highest")
-            ax.plot(n_gauss_list, AIC_median, 'r:') #, label="AIC - Median")
+            ax.plot(n_gauss_list, AIC_max, 'r:') #, label="AIC - Highest")
+            ax.plot(n_gauss_list, AIC_median, 'r--') #, label="AIC - Median")
 
-            ax.set_xlabel("Number of Gaussian Components", fontsize=12)
-            ax.set_ylabel("Score", fontsize=12)
-            ax.legend(loc='upper left')
-
+            ax.set_xlabel("Number of Gaussian Components", fontsize=14)
+            ax.set_ylabel("Score", fontsize=14)
+            ax.legend(loc='upper left', fontsize=14)
+            ax.tick_params(axis='both', labelsize=14)
             ax.grid(True)
 
 
@@ -647,8 +648,8 @@ class XDPipeline:
                     axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
                     # BIC - Blue
                     axins.plot(n_gauss_list, zoom_in_min, 'b-')
-                    axins.plot(n_gauss_list, zoom_in_max, 'b--') 
-                    axins.plot(n_gauss_list, zoom_in_median, 'b:')
+                    axins.plot(n_gauss_list, zoom_in_max, 'b:') 
+                    axins.plot(n_gauss_list, zoom_in_median, 'b--')
 
                 if opt_metric == 'AIC':
                     zoom_in_min = AIC_min
@@ -657,8 +658,8 @@ class XDPipeline:
                     axins = inset_axes(ax, width="40%", height="30%", loc='upper right')
                     # AIC - Red
                     axins.plot(n_gauss_list, zoom_in_min, 'r-')
-                    axins.plot(n_gauss_list, zoom_in_max, 'r--')
-                    axins.plot(n_gauss_list, zoom_in_median, 'r:')
+                    axins.plot(n_gauss_list, zoom_in_max, 'r:')
+                    axins.plot(n_gauss_list, zoom_in_median, 'r--')
 
 
                 # Set x-axis limits from zoom_in list
@@ -989,7 +990,8 @@ class XDPipeline:
                 full_survey_file: Optional[str] = None,
                 color_palette: Optional[list] = None,
                 xlim: Optional[tuple] = None,
-                ylim: Optional[tuple] = None) -> None:
+                ylim: Optional[tuple] = None, 
+                legend: Optional[tuple] = None) -> None:
         """
         Creates a 2D plot of the Extreme Deconvolution (XD) results, displaying:
         - Individual stars colored by their assigned Gaussian component
@@ -1018,6 +1020,8 @@ class XDPipeline:
             Tuple (min, max) to manually set x-axis limits on the main plot.
         ylim : tuple, optional
             Tuple (min, max) to manually set y-axis limits on the main plot.
+        legend : tuple, optional
+            Tuple (x, y) to manually set legend position on the main plot.
 
         Raises
         ------
@@ -1123,9 +1127,9 @@ class XDPipeline:
 
         # Main scatter plot - with stars coloured by their assigned Gaussian component
         ax_main.scatter(x_data, y_data, c=[colors[i-1] for i in assignments], s=3, alpha=0.5)
-        ax_main.set_xlabel(xlabel, fontsize=13)
-        ax_main.set_ylabel(ylabel, fontsize=13)
-        ax_main.tick_params(axis='both', which='major', labelsize=12)
+        ax_main.set_xlabel(xlabel, fontsize=19)
+        ax_main.set_ylabel(ylabel, fontsize=19)
+        ax_main.tick_params(axis='both', which='major', labelsize=18)
 
         if xlim:
             ax_main.set_xlim(xlim)
@@ -1156,7 +1160,7 @@ class XDPipeline:
         if self.scaling:
             if y_key == 'E_50' or y_key == 'Energy':
                 ax_main.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e-5:.1f}"))
-                ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=13)
+                ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=16)
 
         # Histograms
         bins_x = np.linspace(np.min(x_data), np.max(x_data), 40)
@@ -1171,8 +1175,8 @@ class XDPipeline:
             ax_histx.set_xlim(xlim)
         if ylim:
             ax_histy.set_ylim(ylim)
-        ax_histx.tick_params(axis='y', which='major', labelsize=12)
-        ax_histy.tick_params(axis='x', which='major', labelsize=12)
+        ax_histx.tick_params(axis='y', which='major', labelsize=18)
+        ax_histy.tick_params(axis='x', which='major', labelsize=18)
 
         # Gaussian overlays
         x_min = min(np.min(x_data), xlim[0]) if xlim else np.min(x_data)
@@ -1215,7 +1219,7 @@ class XDPipeline:
         for bar, weight in zip(bars, bar_heights):
             ax_bar.text(bar.get_x() + bar.get_width() / 2, weight + 2,
                         f"{weight:.1f}%", ha='center', va='bottom',
-                        fontsize=11, color='black', rotation=90)
+                        fontsize=13, color='black', rotation=90)
 
         ax_bar.set_ylim(0, 75)
         ax_bar.set_xlim(-0.5, n_components - 0.5)
@@ -1224,6 +1228,22 @@ class XDPipeline:
         ax_bar.set_xticks([])
         ax_bar.yaxis.grid(True, linestyle='--', alpha=1)
         ax_bar.set_axisbelow(True)
+
+        # Add an optional legend
+        if legend:
+            legend_elements = []
+            for idx, name in legend.items():
+                legend_elements.append(
+                    Line2D([0], [0], marker='o', color='w', label=name,
+                        markerfacecolor=colors[idx], markersize=8, alpha=0.7)
+                )
+            ax_main.legend(
+                handles=legend_elements,
+                loc='upper right',
+                fontsize=15,
+                frameon=True,
+                facecolor='white'
+    )
 
         plt.show()
 
@@ -1413,7 +1433,7 @@ class XDPipeline:
         if self.scaling:
             if y_key == 'E_50' or y_key == 'Energy':
                 ax_main.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e-5:.1f}"))
-                ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=13)
+                ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=18)
 
         # Histograms
         bins_x = np.linspace(np.min(x_data), np.max(x_data), 40)

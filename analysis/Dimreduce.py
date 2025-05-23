@@ -20,10 +20,10 @@ def investigate_umap(
     n_components_gmm=5,
     min_cluster_size_hdbscan=30,
     min_samples_hdbscan=1,
-    axis_label_fontsize=14,
-    tick_fontsize=13,
+    axis_label_fontsize=18,
+    tick_fontsize=18,
     title_fontsize=19,
-    legend_fontsize=13
+    legend_fontsize=15
 ):
     """
     Visualizes UMAP dimensionality reduction results for a high-dimensional dataset and 
@@ -141,8 +141,8 @@ def investigate_umap(
 
     # Add titles to the plots
     if cluster_method:
-        fig.text(0.5, 0.52, f"{cluster_method} Clustering", ha='center', va='top', fontsize=title_fontsize)
-    fig.text(0.5, 1.0, "True Labels", ha='center', va='bottom', fontsize=title_fontsize)
+        fig.text(0.5, 0.52, f"{cluster_method} Clustering Labels", ha='center', va='top', fontsize=title_fontsize)
+    fig.text(0.5, 1.0, "High Dimensional XD Labels", ha='center', va='bottom', fontsize=title_fontsize)
 
     # Add XD labels to the top-left the UMAP plot
     handles, labels_ = axes[0, 0].get_legend_handles_labels()

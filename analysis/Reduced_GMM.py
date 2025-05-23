@@ -15,6 +15,7 @@ import seaborn as sns
 from matplotlib.patches import Ellipse
 from matplotlib.ticker import FuncFormatter
 import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 from typing import List, Tuple, Optional, Union
 
@@ -588,8 +589,9 @@ class ReducedGMMPipeline:
 
         # Main scatter of UMAP data colored by GMM labels - using the defined color palette if provided
         ax_main.scatter(umap_data[:, 0], umap_data[:, 1], c=[colors[i] for i in labels], s=3, alpha=0.5)
-        ax_main.set_xlabel("UMAP-1", fontsize=13)
-        ax_main.set_ylabel("UMAP-2", fontsize=13)
+        ax_main.set_xlabel("UMAP-1", fontsize=19)
+        ax_main.set_ylabel("UMAP-2", fontsize=19)
+        ax_main.tick_params(axis='both', which='major', labelsize=18)
         if xlim: ax_main.set_xlim(xlim)
         if ylim: ax_main.set_ylim(ylim)
 
@@ -615,6 +617,8 @@ class ReducedGMMPipeline:
         hist_y = ax_histy.hist(umap_data[:, 1], bins=bins_y, color='gray', alpha=0.5, orientation='horizontal')
         ax_histx.set_xticks([])
         ax_histy.set_yticks([])
+        ax_histx.tick_params(axis='y', which='major', labelsize=18)
+        ax_histy.tick_params(axis='x', which='major', labelsize=18)
         if xlim: ax_histx.set_xlim(xlim)
         if ylim: ax_histy.set_ylim(ylim)
 
@@ -658,7 +662,7 @@ class ReducedGMMPipeline:
 
         for bar, w in zip(bars, sorted_weights * 100):
             ax_bar.text(bar.get_x() + bar.get_width() / 2, w + 2, f"{w:.1f}%", ha='center',
-                        va='bottom', fontsize=10, rotation=90)
+                        va='bottom', fontsize=12, rotation=90)
 
         ax_bar.set_ylim(0, 75)
         ax_bar.set_xticks([])
@@ -836,7 +840,8 @@ class ReducedGMMPipeline:
                 color_palette: Optional[list] = None,
                 xlim: Optional[tuple] = None,
                 ylim: Optional[tuple] = None, 
-                deconvolve: bool = False) -> None:
+                deconvolve: bool = False, 
+                legend: Optional[tuple] = None) -> None:
         """
         Visualize GMM component assignments in high-dimensional space for two selected features.
 
@@ -868,6 +873,9 @@ class ReducedGMMPipeline:
             from the empirical covariance matrix of each component before plotting the ellipses.
             This reveals the intrinsic spread of each GMM component, assuming independent
             Gaussian measurement errors in x and y.
+        legend : tuple, optional
+            If provided, a tuple of (x, y) coordinates for the legend position.
+        
 
         Raises
         ------
@@ -990,9 +998,9 @@ class ReducedGMMPipeline:
 
         # Main scatter plot - with stars coloured by their assigned Gaussian component
         ax_main.scatter(x_data, y_data, c=[colors[i] for i in assignments], s=3, alpha=0.5)
-        ax_main.set_xlabel(xlabel, fontsize=13)
-        ax_main.set_ylabel(ylabel, fontsize=13)
-        ax_main.tick_params(axis='both', which='major', labelsize=12)
+        ax_main.set_xlabel(xlabel, fontsize=19)
+        ax_main.set_ylabel(ylabel, fontsize=19)
+        ax_main.tick_params(axis='both', which='major', labelsize=18)
 
         if xlim:
             ax_main.set_xlim(xlim)
@@ -1014,13 +1022,15 @@ class ReducedGMMPipeline:
             lw = np.clip(1.0 + 4.0 * weights[i], 1.0, 3.5)
             alpha = np.clip(0.4 + 0.7 * weights[i], 0.4, 0.9)
 
+            # alpha_array = [0.5, 1, 1, 0.5, 1, 1]
+            # alpha_array[i]
             ellipse = Ellipse(xy=mean, width=width, height=height, angle=angle,
                             edgecolor=colors[i], facecolor='none', linewidth=lw, alpha=alpha, linestyle='--')
             ax_main.add_patch(ellipse)
 
         if y_key == 'E_50' or y_key == 'Energy':
             ax_main.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e-5:.1f}"))
-            ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=13)
+            ax_main.set_ylabel(f"{ylabel} ($\\times 10^5$)", fontsize=18)
 
         # Histograms
         bins_x = np.linspace(np.min(x_data), np.max(x_data), 40)
@@ -1035,8 +1045,8 @@ class ReducedGMMPipeline:
             ax_histx.set_xlim(xlim)
         if ylim:
             ax_histy.set_ylim(ylim)
-        ax_histx.tick_params(axis='y', which='major', labelsize=12)
-        ax_histy.tick_params(axis='x', which='major', labelsize=12)
+        ax_histx.tick_params(axis='y', which='major', labelsize=18)
+        ax_histy.tick_params(axis='x', which='major', labelsize=18)
 
         # Gaussian overlays
         x_min = min(np.min(x_data), xlim[0]) if xlim else np.min(x_data)
@@ -1080,7 +1090,7 @@ class ReducedGMMPipeline:
         for bar, weight in zip(bars, bar_heights):
             ax_bar.text(bar.get_x() + bar.get_width() / 2, weight + 2,
                         f"{weight:.1f}%", ha='center', va='bottom',
-                        fontsize=11, color='black', rotation=90)
+                        fontsize=13, color='black', rotation=90)
 
         ax_bar.set_ylim(0, 75)
         ax_bar.set_xlim(-0.5, n_components - 0.5)
@@ -1089,5 +1099,21 @@ class ReducedGMMPipeline:
         ax_bar.set_xticks([])
         ax_bar.yaxis.grid(True, linestyle='--', alpha=1)
         ax_bar.set_axisbelow(True)
+
+        # Add an optional legend
+        if legend:
+            legend_elements = []
+            for idx, name in legend.items():
+                legend_elements.append(
+                    Line2D([0], [0], marker='o', color='w', label=name,
+                        markerfacecolor=colors[idx], markersize=8, alpha=0.7)
+                )
+            ax_main.legend(
+                handles=legend_elements,
+                loc='upper right',
+                fontsize=15,
+                frameon=True,
+                facecolor='white'
+    )
 
         plt.show()
