@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from tabulate import tabulate
 import pandas as pd
 from collections import defaultdict, Counter
@@ -231,7 +232,7 @@ class XDPipeline:
         """
         return - 2 * log_likelihood + 2 * num_params
     
-    def run_XD(self, gauss_component_range: Tuple[int, int] = (1, 10), max_iterations: int = int(1e9), n_repeats: int = 3, n_init: int = 100, save_path: Optional[str] = None) -> None:
+    def run_XD(self, gauss_component_range: Tuple[int, int] = (1, 10), max_iterations: int = int(1e9), n_repeats: int = 3, n_init: int = 100, save_path: Optional[str] = None, timings: Optional[bool] = None):
         """
         Initialise the XDPipeline with stellar data and define the parameter space for 
         Extreme Deconvolution (XD) using a specified set of features and their uncertainties.
@@ -257,6 +258,13 @@ class XDPipeline:
             Whether to apply standard scaling (zero mean, unit variance) to the input features.
             If False, no scaling is applied globally, but energy-related columns ('E_50' or 'Energy')
             are manually divided by 1e5. Default is True.
+        timings : bool, optional
+            If True, returns an distionary of the average time taken for each GMM fit. (ie per component count)
+
+        Returns
+        -------
+        Optional[Dict[int, float]]
+            If timings is True, returns a dict of average fit times per component count.
 
         Raises
         ------
@@ -330,8 +338,16 @@ class XDPipeline:
             "covariances": []
         }
 
+        # Set up timing dictionary and time tracking
+        timing_dict = {}
+        total_start = time.time()
+
         # Iterate for a test range of number of gaussians
         for n_gauss in tqdm(range(self.gauss_component_range[0], self.gauss_component_range[1] + 1), desc="Number of Gaussian Components"):
+
+            # Start the timer for the current number of gaussians
+            start_time_run = time.time()
+
             # Overall repeats 
             for n in tqdm(range(self.n_repeats), desc="Repeat Cycles", leave=False):
                 # Random initialisations of input parameters
@@ -409,6 +425,15 @@ class XDPipeline:
                         self.results_XD["weights"].append(None)
                         self.results_XD["means"].append(None)
                         self.results_XD["covariances"].append(None)
+            
+            # End the timer for fitting the GMM
+            end_time_run = time.time()
+
+            # Average it across all of the initialisations - ie time per initialisation 
+            avg_time_per_init = (end_time_run - start_time_run) / (n_init * n_repeats)
+            # Save it to the timing dictionary
+            timing_dict[n_gauss] = avg_time_per_init
+
 
             # Save the results if a path is provided
             # This is redone for each component count to ensure that the results are saved in case of a crash
@@ -419,8 +444,16 @@ class XDPipeline:
                     print(f"Results saved successfully at {self.save_path_XD}")
                 except Exception as e:
                     print(f"Failed to save results: {e}")
+        
+        # Return the total run time
+        total_end = time.time()
+        print(f"Total run time: {total_end - total_start:.2f} seconds")
 
-        return None
+        # If timings is True, return the timing dictionary
+        if timings:
+            return timing_dict
+        else:
+            return None
     
     def compare_XD(self, opt_metric = 'BIC', n_gauss_filter: Optional[int] = None, repeat_no_filter: Optional[int] = None, save_path: Optional[str] = None, zoom_in: Optional[List[int]] = None, display_full: bool = True) -> None:
         """

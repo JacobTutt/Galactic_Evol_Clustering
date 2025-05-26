@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from tabulate import tabulate
 import pandas as pd
 
@@ -276,7 +277,7 @@ class ReducedGMMPipeline:
         plt.show()
 
 
-    def run_GMM(self, gauss_component_range: Tuple[int, int] = (1, 10), n_init: int = 10, save_path: Optional[str] = None) -> None:
+    def run_GMM(self, gauss_component_range: Tuple[int, int] = (1, 10), n_init: int = 10, save_path: Optional[str] = None, timings: Optional[bool] = None):
         """
         Fit Gaussian Mixture Models (GMMs) to the UMAP-reduced stellar data across a range of component numbers.
 
@@ -292,6 +293,13 @@ class ReducedGMMPipeline:
             Number of random initialisations for each GMM. Default is 10.
         save_path : str, optional
             If provided, saves the dictionary of GMM results to this path as a pickle file.
+        timings : bool, optional
+            If True, returns an distionary of the average time taken for each GMM fit. (ie per component count)
+
+        Returns
+        -------
+        Optional[Dict[int, float]]
+            If timings is True, returns a dict of average fit times per component count.
 
         Raises
         ------
@@ -336,6 +344,11 @@ class ReducedGMMPipeline:
             "labels": []
         }
 
+        # Set up timing dictionary and time tracking
+        timing_dict = {}
+        total_start = time.time()
+
+
         # GMM can automatically handle multiple initialisations and select the best results 
         # Therefore we do not need to worry about multiple loops for initialisations - it will simply resturn the best result
         for n_gauss in range(gauss_component_range[0], gauss_component_range[1] + 1):
@@ -348,6 +361,8 @@ class ReducedGMMPipeline:
                     random_state=12
                 )
 
+                # Start the timer for fitting the GMM
+                start_time_run = time.time()
                 # Fit the GMM to the UMAP data
                 gmm.fit(self.umap_data)
 
@@ -366,9 +381,22 @@ class ReducedGMMPipeline:
                 self.results_GMM["covariances"].append(gmm.covariances_)
                 self.results_GMM["labels"].append(gmm.predict(self.umap_data))
 
+                # End the timer for fitting the GMM
+                end_time_run = time.time()
+
+                # Average it across all of the initialisations - ie time per initialisation 
+                avg_time_per_init = (end_time_run - start_time_run) / n_init
+                # Save it to the timing dictionary
+                timing_dict[n_gauss] = avg_time_per_init
+
             except Exception as e:
                 print(f"GMM failed for {n_gauss} components: {e}")
+            
+        # Return the total run time
+        total_end = time.time()
+        print(f"Total run time: {total_end - total_start:.2f} seconds")
 
+        # Save the results file to a pickle file if a save path is provided
         if save_path:
             try:
                 with open(save_path, "wb") as f:
@@ -376,6 +404,13 @@ class ReducedGMMPipeline:
                 print(f"Results saved to {save_path}")
             except Exception as e:
                 print(f"Failed to save results: {e}")
+
+        # If timings are requested, return the timing dictionary
+        if timings:
+            return timing_dict
+        else:
+            return None
+
 
     def compare_GMM(self, opt_metric='BIC', n_gauss_filter: Optional[int] = None, save_path: Optional[str] = None, display_full: bool = True, zoom_in: Optional[List[int]] = None) -> None:
         """
