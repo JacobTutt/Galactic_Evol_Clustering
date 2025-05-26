@@ -25,3 +25,5 @@ The notebooks in this repository serve as descriptions of the pipeline design, m
      - Overview of the pipeline that automates robust dimensionality mapping, clustering, and analysis on GALAH data, along with visualised results.
    * - ``7_6D_galah_reconstruction.ipynb``
      - Here we investigate the success of GALAH at resolving these structures and whether this is simply attributed to the Higher Dimensionality of Chemical Abundances or the dataset itself.
+   * - ``8_computational_cost_compare.ipynb``
+     - Here we explicity compare the computational costs of the low dimensional and high dimensional pipelines to show the significant speed up across all models

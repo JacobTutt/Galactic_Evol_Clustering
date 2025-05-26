@@ -83,18 +83,20 @@ Detailed documentation of the available pipelines is available [here](https://ga
 
 ## Notebooks
 
-The notebooks in this repository serve as descriptions of the pipeline design, motivation, and implementation, while also presenting key results and providing brief commentary on the research decisions made.
+The [notebooks](notebooks) in this repository serve as descriptions of the pipeline design, motivation, and implementation, while also presenting key results and providing brief commentary on the research decisions made.
 
 | Notebook | Description |
 |----------|-------------|
-| [0_data_preprocessing.ipynb](0_data_preprocessing.ipynb) | Overview of the preprocessing and filtering pipelines, including data querying and the motivation behind the cuts used to obtain a usable dataset for analysis. |
-| [1_apogee_scaled_pipeline.ipynb](1_apogee_scaled_pipeline.ipynb) | A full run-through of the Extreme Deconvolution (GMM) pipeline applied to the 6-dimensional APOGEE dataset (with normalisation), describing the analysis and providing visualisation and discussion of results. |
-| [2_galah_scaled_pipeline.ipynb](2_galah_scaled_pipeline.ipynb) | A similar notebook to the one above, but applied to the 12-dimensional space provided by GALAH. |
-| [3_apogee_unscaled_pipeline.ipynb](3_apogee_unscaled_pipeline.ipynb) | A demonstration of the XD pipeline’s functionality for automating the scaling procedure or manually adjusting energy (although results are not promising and not discussed in detail). |
-| [4_dimreduction_investigate.ipynb](4_dimreduction_investigate.ipynb) | A demonstration of dimensionality reduction techniques used to visualise the structures stability and an initial investigation into clustering within this space. |
-| [5_apogee_assignment_statistic.ipynb](5_apogee_assignment_statistic.ipynb) | A Notebook demonstrating the cluster assignment analysis pipeline and investigating the Aurora Population |
-| [6_galah_reconstruction.ipynb](6_galah_reconstruction.ipynb) | Overview of the pipeline that automates robust dimensionality mapping, clustering, and analysis on GALAH data, along with visualised results. |
-| [7_6D_galah_reconstruction.ipynb](7_6D_galah_reconstruction.ipynb) | Here we investigate the success of GALAH at resolving these structures and whether this is simply attributed to the Higher Dimensionality of Chemical Abundances or the dataset itself. |
+| [0_data_preprocessing.ipynb](notebooks/0_data_preprocessing.ipynb) | Overview of the preprocessing and filtering pipelines, including data querying and the motivation behind the cuts used to obtain a usable dataset for analysis. |
+| [1_apogee_scaled_pipeline.ipynb](notebooks/1_apogee_scaled_pipeline.ipynb) | A full run-through of the Extreme Deconvolution (GMM) pipeline applied to the 6-dimensional APOGEE dataset (with normalisation), describing the analysis and providing visualisation and discussion of results. |
+| [2_galah_scaled_pipeline.ipynb](notebooks/2_galah_scaled_pipeline.ipynb) | A similar notebook to the one above, but applied to the 12-dimensional space provided by GALAH. |
+| [3_apogee_unscaled_pipeline.ipynb](notebooks/3_apogee_unscaled_pipeline.ipynb) | A demonstration of the XD pipeline’s functionality for automating the scaling procedure or manually adjusting energy (although results are not promising and not discussed in detail). |
+| [4_dimreduction_investigate.ipynb](notebooks/4_dimreduction_investigate.ipynb) | A demonstration of dimensionality reduction techniques used to visualise the structures stability and an initial investigation into clustering within this space. |
+| [5_apogee_assignment_statistic.ipynb](notebooks/5_apogee_assignment_statistic.ipynb) | A Notebook demonstrating the cluster assignment analysis pipeline and investigating the Aurora Population |
+| [6_galah_reconstruction.ipynb](notebooks/6_galah_reconstruction.ipynb) | Overview of the pipeline that automates robust dimensionality mapping, clustering, and analysis on GALAH data, along with visualised results. |
+| [7_6D_galah_reconstruction.ipynb](notebooks/7_6D_galah_reconstruction.ipynb) | Here we investigate the success of GALAH at resolving these structures and whether this is simply attributed to the Higher Dimensionality of Chemical Abundances or the dataset itself. |
+| [8_computational_cost_compare.ipynb](notebooks/8_computational_cost_compare.ipynb) | Here we explicity compare the computational costs of the low dimensional and high dimensional pipelines to show the significant speed up across all models. |
+
 ---
 
 ## Installation and Usage
