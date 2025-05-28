@@ -1535,7 +1535,7 @@ class XDPipeline:
 
 
 
-def compare_assignments(results_table, target_label, label_map):
+def compare_assignments(results_table, target_label, label_map, fractional_threshold=50.0):
     """
     For stars primarily assigned to `target_label`, this function:
 
@@ -1558,6 +1558,10 @@ def compare_assignments(results_table, target_label, label_map):
 
     label_map : dict
         Maps of intenger indices (starting from 1) to astrophysical names of componets.
+
+    fractional_threshold : float, optional
+        Percentage threshold to filter second-best components.
+        
     """
 
     # Map the input target label to its corresponding Gaussian number
@@ -1613,6 +1617,7 @@ def compare_assignments(results_table, target_label, label_map):
     # Define headers and table structure
     table_headers = [
         "Second-Best Component", "# Stars", 
+        f"# >{fractional_threshold:.0f}% 2nd",
         "Mean % of 1st", "Std % of 1st", "Median % of 1st",
         "Mean Abs Diff", "Median Abs Diff", "Std Abs Diff"
     ]
@@ -1623,9 +1628,11 @@ def compare_assignments(results_table, target_label, label_map):
         label = label_map.get(gauss_num, f"Gaussian {gauss_num}")
         percent_list = percent_stats[gauss_num]
         abs_list = abs_stats[gauss_num]
+        count_above_thresh = sum(p > fractional_threshold for p in percent_list)
         table_rows.append([
             label,
             len(percent_list),
+            count_above_thresh,
             f"{np.mean(percent_list):.2f}",
             f"{np.std(percent_list):.2f}",
             f"{np.median(percent_list):.2f}",
