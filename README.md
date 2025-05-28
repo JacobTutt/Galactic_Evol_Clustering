@@ -15,7 +15,7 @@ GALAH, Myeong et al 2022](https://iopscience.iop.org/article/10.3847/1538-4357/a
 
 2. Compare the success of the APOGEE and GALAH surveys in recovering the Milky Way’s assembly history.
 
-3. Prepose suggestions to future approaches of clustering algorthims to improve convergence, scalability and stability for greater applicability to the larger scale datasets from upcoming spectroscopic surveys such as WEAVE and 4MOST. 
+3. Prepose suggestions to future approaches of clustering algorthims to improve convergence, scalability and stability for the application to the larger scale datasets from upcoming spectroscopic surveys such as WEAVE and 4MOST. 
 
 This repository forms part of the submission for the MPhil in Data Intensive Science's Research Project at the University of Cambridge.
 
@@ -46,7 +46,7 @@ The full data used for the project can be found here:
 
 | Directory      | Description |
 |----------------|-------------|
-| `data/raw/`         | The full surveys datasets as well as Value Added Catalogues (VACs) before effective cuts have been applied. These are predominantly required in [Notebook 0](0_data_preprocessing.ipynb) which constructed the datasets used throughout the analysis. They are also used within the ploting of GMM results to provide background context on the overall data distribution (although this can be easily removed by removing the `full_survey_file` input path). |
+| `data/raw/`         | The full surveys datasets as well as Value Added Catalogues (VACs) before effective cuts have been applied. These are only required for [Notebook 0](0_data_preprocessing.ipynb) which constructes the datasets used throughout the analysis. Some files are also used within the ploting of GMM results to provide background context on the overall data distribution (however this functionality has been turned off so it is not required). |
 | [`data/filtered/`](data/filtered/)    | Holds the resultant APOGEE and GALAH datasets after quality and scientific cuts have been applied (built in [Notebook 0](0_data_preprocessing.ipynb)). These are also included directly in the GitHub repository. |
 
 Additionally the repository contains:
@@ -128,7 +128,7 @@ pip install -r requirements.txt
 ```
 #### 3.2 Additional Installation: Extreme Deconvolution
 
-This project utiliaes the `extreme_deconvolution` algorithm for Gaussian Mixture Model (GMM) implementation. This provided by Bovy et al. (2011) but is not directly available via PyPI.
+This project utilises the `extreme_deconvolution` algorithm for Gaussian Mixture Model (GMM) implementation. This is provided by Bovy et al. (2011) but is not directly available via PyPI.
 
 
 To install the package, follow these steps, or for more details see the source repository's `README`:
