@@ -1057,8 +1057,8 @@ class ReducedGMMPipeline:
             lw = np.clip(1.0 + 4.0 * weights[i], 1.0, 3.5)
             alpha = np.clip(0.4 + 0.7 * weights[i], 0.4, 0.9)
 
-            # alpha_array = [0.5, 1, 1, 0.5, 1, 1]
-            # alpha_array[i]
+            # alpha_array = [0.75, 1, 1, 0.75, 1, 1]
+            # alpha = alpha_array[i]
             ellipse = Ellipse(xy=mean, width=width, height=height, angle=angle,
                             edgecolor=colors[i], facecolor='none', linewidth=lw, alpha=alpha, linestyle='--')
             ax_main.add_patch(ellipse)
