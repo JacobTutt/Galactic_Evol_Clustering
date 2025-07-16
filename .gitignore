@@ -2,8 +2,7 @@ data/raw
 \diss_venvs
 .DS_Store
 \extreme-deconvolution
-
-
+presentation/script.docx
 # Ignore Python cache files
 */__pycache__
 *.pyc
