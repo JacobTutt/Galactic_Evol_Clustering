@@ -4,6 +4,8 @@
 ### Supervisor: Dr GyuChul Myeong, Institute of Astronomy, University of Cambridge
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Documentation Status](https://readthedocs.org/projects/galactic-evol-clustering/badge/?version=latest)](https://galactic-evol-clustering.readthedocs.io/en/latest/?badge=latest)
+
 
 
 ## Description
@@ -193,15 +195,3 @@ If you have any questions, run into issues, or just want to discuss the project,
 
 ## Authors
 This project is maintained by Jacob Tutt under the supervision of Dr GyuChul Myeong.
-
-
-
-## Declaration of Use of Autogeneration Tools
-This report made use of Large Language Models (LLMs) to assist in the development of the project.
-These tools have been employed for:
-- Formatting plots to enhance presentation quality.
-- Performing iterative changes to already defined code.
-- Debugging code and identifying issues in implementation.
-- Helping with Latex formatting for the report.
-- Identifying grammar and punctuation inconsistencies within the report.
-- Helping to generate the repository's metadata files.
